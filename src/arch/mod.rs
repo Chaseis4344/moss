@@ -149,6 +149,11 @@ pub trait Arch: CpuOps + VirtualMemory {
         len: usize,
     ) -> impl Future<Output = Result<usize>>;
 }
+#[cfg(target_arch = "x86_64")]
+mod x86_64;
+
+#[cfg(target_arch = "x86_64")]
+pub use self::x86_64::Arch as ArchImpl;
 
 #[cfg(target_arch = "aarch64")]
 mod arm64;

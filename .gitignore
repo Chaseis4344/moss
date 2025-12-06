@@ -2,3 +2,4 @@
 /build
 .gdb_history
 *.img
+rust-project.json
