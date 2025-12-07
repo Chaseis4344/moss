@@ -5,7 +5,8 @@ use libkernel::{
     memory::address::{UA, VA},
 };
 
-pub(crate) mod cpu_ops;
+mod cpu_ops;
+mod virtual_memory;
 
 pub struct x86_64 {}
 impl Arch for x86_64 {
