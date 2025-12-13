@@ -15,10 +15,6 @@ impl Arch for x86_64 {
     }
 
     fn power_off() -> ! {
-        
-        loop{}
-        
+        loop {}
     }
 }
-
-
