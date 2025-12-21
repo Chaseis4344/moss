@@ -168,6 +168,7 @@ pub struct Task {
     pub process: Arc<ThreadGroup>,
     pub vm: Arc<SpinLock<ProcVM>>,
     pub cwd: Arc<SpinLock<(Arc<dyn Inode>, PathBuf)>>,
+    pub root: Arc<SpinLock<(Arc<dyn Inode>, PathBuf)>>,
     pub creds: SpinLock<Credentials>,
     pub fd_table: Arc<SpinLock<FileDescriptorTable>>,
     pub ctx: SpinLock<Context>,
@@ -201,6 +202,7 @@ impl Task {
             state: Arc::new(SpinLock::new(TaskState::Runnable)),
             priority: i8::MIN,
             cwd: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
+            root: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             creds: SpinLock::new(Credentials::new_root()),
             ctx: SpinLock::new(Context::from_user_ctx(user_ctx)),
             vm: Arc::new(SpinLock::new(vm)),
@@ -222,6 +224,7 @@ impl Task {
             process: ThreadGroupBuilder::new(Tgid::init()).build(),
             state: Arc::new(SpinLock::new(TaskState::Runnable)),
             cwd: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
+            root: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             creds: SpinLock::new(Credentials::new_root()),
             vm: Arc::new(SpinLock::new(
                 ProcessVM::empty().expect("Could not create init process's VM"),
