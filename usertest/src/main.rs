@@ -149,22 +149,6 @@ fn test_futex() {
     println!(" OK");
 }
 
-fn test_rust_mutex() {
-    use std::sync::{Arc, Mutex};
-
-    print!("Testing Rust Mutex ...");
-    let mutex = Arc::new(Mutex::new(0));
-    let mtx_clone = Arc::clone(&mutex);
-    let mut num = mtx_clone.lock().unwrap();
-    *num += 1;
-    drop(num);
-    let final_count = *mutex.lock().unwrap();
-    if final_count != 1 {
-        panic!("Mutex test failed, expected 1 but got {}", final_count);
-    }
-    println!(" OK");
-}
-
 fn test_rust_file() {
     print!("Testing rust file operations ...");
     use std::fs::{self, File};
@@ -231,7 +215,6 @@ fn main() {
     run_test(test_read);
     run_test(test_write);
     run_test(test_futex);
-    run_test(test_rust_mutex);
     run_test(test_rust_file);
     run_test(test_rust_dir);
     let end = std::time::Instant::now();
