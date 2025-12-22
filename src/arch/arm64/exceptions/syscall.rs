@@ -1,3 +1,5 @@
+use crate::fs::syscalls::chdir::sys_chroot;
+use crate::fs::syscalls::trunc::sys_ftruncate;
 use crate::kernel::power::sys_reboot;
 use crate::kernel::rand::sys_getrandom;
 use crate::memory::mmap::sys_mprotect;
@@ -10,9 +12,11 @@ use crate::{
         syscalls::{
             at::{
                 access::{sys_faccessat, sys_faccessat2},
+                mkdir::sys_mkdirat,
                 open::sys_openat,
                 readlink::sys_readlinkat,
                 stat::sys_newfstatat,
+                unlink::sys_unlinkat,
             },
             chdir::{sys_chdir, sys_getcwd},
             close::sys_close,
@@ -25,6 +29,7 @@ use crate::{
             sync::sys_sync,
         },
     },
+    kernel::sysinfo::sys_sysinfo,
     kernel::uname::sys_uname,
     memory::{
         brk::sys_brk,
@@ -57,7 +62,7 @@ use crate::{
             umask::sys_umask,
             wait::sys_wait4,
         },
-        threading::{sys_set_robust_list, sys_set_tid_address},
+        threading::{sys_futex, sys_set_robust_list, sys_set_tid_address},
     },
     sched::current_task,
 };
@@ -91,8 +96,12 @@ pub async fn handle_syscall() {
         0x18 => sys_dup3(arg1.into(), arg2.into(), arg3 as _),
         0x19 => sys_fcntl(arg1.into(), arg2 as _, arg3 as _).await,
         0x1d => sys_ioctl(arg1.into(), arg2 as _, arg3 as _).await,
+        0x22 => sys_mkdirat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
+        0x23 => sys_unlinkat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
+        0x2e => sys_ftruncate(arg1.into(), arg2 as _).await,
         0x30 => sys_faccessat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
         0x31 => sys_chdir(TUA::from_value(arg1 as _)).await,
+        0x33 => sys_chroot(TUA::from_value(arg1 as _)).await,
         0x38 => {
             sys_openat(
                 arg1.into(),
@@ -163,6 +172,17 @@ pub async fn handle_syscall() {
         0x5d => sys_exit(arg1 as _),
         0x5e => sys_exit_group(arg1 as _),
         0x60 => sys_set_tid_address(VA::from_value(arg1 as _)).await,
+        0x62 => {
+            sys_futex(
+                TUA::from_value(arg1 as _),
+                arg2 as _,
+                arg3 as _,
+                VA::from_value(arg4 as _),
+                TUA::from_value(arg5 as _),
+                arg6 as _,
+            )
+            .await
+        }
         0x63 => sys_set_robust_list(TUA::from_value(arg1 as _), arg2 as _).await,
         0x65 => sys_nanosleep(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
         0x71 => sys_clock_gettime(arg1 as _, TUA::from_value(arg2 as _)).await,
@@ -225,6 +245,7 @@ pub async fn handle_syscall() {
         0xb0 => sys_getgid().map_err(|e| match e {}),
         0xb1 => sys_getegid().map_err(|e| match e {}),
         0xb2 => sys_gettid().map_err(|e| match e {}),
+        0xb3 => sys_sysinfo(TUA::from_value(arg1 as _)).await,
         0xc6 => Err(KernelError::NotSupported),
         0xd6 => sys_brk(VA::from_value(arg1 as _))
             .await
@@ -233,10 +254,10 @@ pub async fn handle_syscall() {
         0xdc => {
             sys_clone(
                 arg1 as _,
-                arg2 as _,
+                UA::from_value(arg2 as _),
                 UA::from_value(arg3 as _),
-                UA::from_value(arg4 as _),
-                arg5 as _,
+                UA::from_value(arg5 as _),
+                arg4 as _,
             )
             .await
         }
@@ -250,6 +271,7 @@ pub async fn handle_syscall() {
         }
         0xde => sys_mmap(arg1, arg2, arg3, arg4, arg5.into(), arg6).await,
         0xe2 => sys_mprotect(VA::from_value(arg1 as _), arg2 as _, arg3 as _),
+        0xe9 => Ok(0), // sys_madvise is a no-op
         0x104 => {
             sys_wait4(
                 arg1.cast_signed() as _,

@@ -43,15 +43,25 @@ bitflags! {
 
 pub async fn sys_clone(
     flags: u32,
-    _newsp: usize,
+    newsp: UA,
     _arent_tidptr: UA,
     _child_tidptr: UA,
-    _tls: usize,
+    tls: usize,
 ) -> Result<usize> {
     let flags = CloneFlags::from_bits_truncate(flags);
 
     let new_task = {
         let current_task = current_task();
+
+        let mut user_ctx = *current_task.ctx.lock_save_irq().user();
+
+        // TODO: Make this arch indepdenant. The child returns '0' on clone.
+        user_ctx.x[0] = 0;
+
+        if flags.contains(CloneFlags::CLONE_SETTLS) {
+            // TODO: Make this arch indepdenant.
+            user_ctx.tpid_el0 = tls as _;
+        }
 
         let (tg, tid) = if flags.contains(CloneFlags::CLONE_THREAD) {
             if !flags.contains(CloneFlags::CLONE_SIGHAND & CloneFlags::CLONE_VM) {
@@ -59,6 +69,8 @@ pub async fn sys_clone(
                 // set.
                 return Err(KernelError::InvalidValue);
             }
+            user_ctx.sp_el0 = newsp.value() as _;
+
             (
                 // A new task whtin this thread group.
                 current_task.process.clone(),
@@ -105,26 +117,30 @@ pub async fn sys_clone(
             Arc::new(SpinLock::new(current_task.cwd.lock_save_irq().clone()))
         };
 
-        let creds = current_task.creds.lock_save_irq().clone();
+        let root = if flags.contains(CloneFlags::CLONE_FS) {
+            current_task.root.clone()
+        } else {
+            Arc::new(SpinLock::new(current_task.root.lock_save_irq().clone()))
+        };
 
-        let mut user_ctx = *current_task.ctx.lock_save_irq().user();
-        // TODO: Make this arch indepdenant. The child returns '0' on clone.
-        user_ctx.x[0] = 0;
+        let creds = current_task.creds.lock_save_irq().clone();
 
         let new_sigmask = *current_task.sig_mask.lock_save_irq();
 
         Task {
             tid,
+            comm: Arc::new(SpinLock::new(*current_task.comm.lock_save_irq())),
             process: tg,
             vm,
             fd_table: files,
             cwd,
+            root,
             creds: SpinLock::new(creds),
             ctx: SpinLock::new(Context::from_user_ctx(user_ctx)),
             priority: current_task.priority,
             sig_mask: SpinLock::new(new_sigmask),
             pending_signals: SpinLock::new(SigSet::empty()),
-            vruntime: SpinLock::new(*current_task.vruntime.lock_save_irq()),
+            vruntime: SpinLock::new(0),
             exec_start: SpinLock::new(None),
             deadline: SpinLock::new(*current_task.deadline.lock_save_irq()),
             state: Arc::new(SpinLock::new(TaskState::Runnable)),

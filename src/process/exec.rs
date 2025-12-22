@@ -1,3 +1,4 @@
+use crate::process::Comm;
 use crate::{
     arch::{Arch, ArchImpl},
     fs::VFS,
@@ -116,8 +117,13 @@ pub async fn kernel_exec(
     // state. Simply activate the new process's address space.
     vm.mm_mut().address_space_mut().activate();
 
+    let new_comm = argv.first().map(|s| Comm::new(s.as_str()));
+
     let current_task = current_task();
 
+    if let Some(new_comm) = new_comm {
+        *current_task.comm.lock_save_irq() = new_comm;
+    }
     *current_task.ctx.lock_save_irq() = Context::from_user_ctx(user_ctx);
     *current_task.state.lock_save_irq() = TaskState::Runnable;
     *current_task.vm.lock_save_irq() = vm;
@@ -270,8 +276,11 @@ pub async fn sys_execve(
         usr_env = usr_env.add_objs(1);
     }
 
+    let task = current_task();
     let path = Path::new(UserCStr::from_ptr(path).copy_from_user(&mut buf).await?);
-    let inode = VFS.resolve_path(path, VFS.root_inode()).await?;
+    let inode = VFS
+        .resolve_path(path, VFS.root_inode(), task.clone())
+        .await?;
 
     kernel_exec(inode, argv, envp).await?;
 

@@ -4,12 +4,14 @@ use async_trait::async_trait;
 use core::sync::atomic::{AtomicU64, Ordering};
 use dir::DirFile;
 use libkernel::error::{FsError, KernelError, Result};
+use libkernel::fs::attr::FilePermissions;
 use libkernel::fs::path::Path;
 use libkernel::fs::{BlockDevice, FS_ID_START, FileType, Filesystem, Inode, InodeId, OpenFlags};
 use open_file::OpenFile;
 use reg::RegFile;
 
 use crate::drivers::{DM, Driver};
+use crate::process::Task;
 use crate::sync::SpinLock;
 use alloc::vec::Vec;
 
@@ -168,7 +170,52 @@ impl VFS {
 
     /// Resolves a path string to an Inode, starting from a given root for
     /// relative paths.
-    pub async fn resolve_path(&self, path: &Path, root: Arc<dyn Inode>) -> Result<Arc<dyn Inode>> {
+    pub async fn resolve_path(
+        &self,
+        path: &Path,
+        root: Arc<dyn Inode>,
+        task: Arc<Task>,
+    ) -> Result<Arc<dyn Inode>> {
+        let mut current_inode = if path.is_absolute() {
+            task.root.lock_save_irq().0.clone() // use the task's root inode, in case a custom chroot was set
+        } else {
+            root
+        };
+
+        for component in path.components() {
+            // Before looking up the component, check if the current inode is a
+            // mount point. If so, traverse into the mounted filesystem's root.
+            if let Some(mount_root) = self
+                .state
+                .lock_save_irq()
+                .get_mount_root(&current_inode.id())
+            {
+                current_inode = mount_root;
+            }
+
+            // Delegate the lookup to the underlying filesystem.
+            current_inode = current_inode.lookup(component).await?;
+        }
+
+        // After the final lookup, check if the destination is itself a mount point.
+        if let Some(mount_root) = self
+            .state
+            .lock_save_irq()
+            .get_mount_root(&current_inode.id())
+        {
+            current_inode = mount_root;
+        }
+
+        Ok(current_inode)
+    }
+
+    /// Resolves a path string to an Inode, starting from a given root for
+    /// relative paths, and using the filesystem root inode for absolute paths.
+    pub async fn resolve_path_absolute(
+        &self,
+        path: &Path,
+        root: Arc<dyn Inode>,
+    ) -> Result<Arc<dyn Inode>> {
         let mut current_inode = if path.is_absolute() {
             self.root_inode
                 .lock_save_irq()
@@ -216,9 +263,11 @@ impl VFS {
         path: &Path,
         flags: OpenFlags,
         root: Arc<dyn Inode>,
+        mode: FilePermissions,
+        task: Arc<Task>,
     ) -> Result<Arc<OpenFile>> {
         // Attempt to resolve the full path first.
-        let resolve_result = self.resolve_path(path, root.clone()).await;
+        let resolve_result = self.resolve_path(path, root.clone(), task.clone()).await;
 
         let target_inode = match resolve_result {
             // The file/directory exists.
@@ -236,11 +285,15 @@ impl VFS {
             Err(KernelError::Fs(FsError::NotFound)) => {
                 // If O_CREAT is specified, we should create it.
                 if flags.contains(OpenFlags::O_CREAT) {
-                    // Resolve its parent directory.
-                    let parent_path = path.parent().ok_or(FsError::InvalidInput)?;
-                    let _file_name = path.file_name().ok_or(FsError::InvalidInput)?;
-
-                    let parent_inode = self.resolve_path(parent_path, root).await?;
+                    // Determine the target name and parent directory. If the path has no
+                    // explicit parent component (e.g., "foo"), use the provided `root`
+                    // (cwd or dirfd) as the parent directory.
+                    let file_name = path.file_name().ok_or(FsError::InvalidInput)?;
+                    let parent_inode = if let Some(parent_path) = path.parent() {
+                        self.resolve_path(parent_path, root.clone(), task).await?
+                    } else {
+                        root.clone()
+                    };
 
                     // Ensure the parent is actually a directory before creating a
                     // file in it.
@@ -248,9 +301,7 @@ impl VFS {
                         return Err(FsError::NotADirectory.into());
                     }
 
-                    // TODO: Check for write permissions on parent_inode before creating.
-                    // let _mode = ...; get mode from syscall arguments
-                    todo!("File creation logic");
+                    parent_inode.create(file_name, FileType::File, mode).await?
                 } else {
                     // O_CREAT was not specified, so NotFound is the correct error.
                     return Err(FsError::NotFound.into());
@@ -313,6 +364,94 @@ impl VFS {
             FileType::Fifo => todo!(),
             FileType::Socket => todo!(),
         }
+    }
+
+    pub async fn mkdir(
+        &self,
+        path: &Path,
+        root: Arc<dyn Inode>,
+        mode: FilePermissions,
+        task: Arc<Task>,
+    ) -> Result<()> {
+        // Try to resolve the target directory first.
+        match self.resolve_path(path, root.clone(), task.clone()).await {
+            // The path already exists, this is an error.
+            Ok(_) => Err(FsError::AlreadyExists.into()),
+
+            // The path does not exist, we need to create it.
+            Err(KernelError::Fs(FsError::NotFound)) => {
+                // Determine the new directory name.
+                let dir_name = path.file_name().ok_or(FsError::InvalidInput)?;
+
+                // Resolve the parent directory.  If the path has no parent
+                // component (e.g., \"foo\"), treat the provided `root`
+                // directory (AT_FDCWD / cwd / dirfd) as the parent.
+                let parent_inode = if let Some(parent_path) = path.parent() {
+                    self.resolve_path(parent_path, root.clone(), task).await?
+                } else {
+                    root.clone()
+                };
+
+                // Verify that the parent is actually a directory.
+                if parent_inode.getattr().await?.file_type != FileType::Directory {
+                    return Err(FsError::NotADirectory.into());
+                }
+
+                // Delegate the creation to the filesystem-specific inode.
+                parent_inode
+                    .create(dir_name, FileType::Directory, mode)
+                    .await?;
+
+                Ok(())
+            }
+
+            // Propagate any other errors up the stack.
+            Err(e) => Err(e),
+        }
+    }
+
+    pub async fn unlink(
+        &self,
+        path: &Path,
+        root: Arc<dyn Inode>,
+        remove_dir: bool,
+        task: Arc<Task>,
+    ) -> Result<()> {
+        // First, resolve the target inode so we can inspect its type.
+        let target_inode = self.resolve_path(path, root.clone(), task.clone()).await?;
+
+        let attr = target_inode.getattr().await?;
+
+        // Validate flag and file-type combinations.
+        match attr.file_type {
+            FileType::Directory if !remove_dir => {
+                return Err(FsError::IsADirectory.into());
+            }
+            FileType::Directory => { /* OK: rmdir semantics */ }
+            _ if remove_dir => {
+                return Err(FsError::NotADirectory.into());
+            }
+            _ => { /* Regular unlink */ }
+        }
+
+        // Determine the parent directory inode in which to perform the unlink.
+        let parent_inode = if let Some(parent_path) = path.parent() {
+            self.resolve_path(parent_path, root.clone(), task).await?
+        } else {
+            root.clone()
+        };
+
+        // Ensure the parent really is a directory.
+        if parent_inode.getattr().await?.file_type != FileType::Directory {
+            return Err(FsError::NotADirectory.into());
+        }
+
+        // Extract the final component (name) and perform the unlink on the parent.
+        let name = path.file_name().ok_or(FsError::InvalidInput)?;
+
+        parent_inode.unlink(name).await?;
+
+        Ok(())
     }
 }
 

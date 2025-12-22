@@ -2,7 +2,7 @@ use crate::{
     CpuOps,
     error::{KernelError, Result},
     memory::{PAGE_SHIFT, address::AddressTranslator, page::PageFrame, smalloc::Smalloc},
-    sync::spinlock::SpinLockIrq,
+    sync::{once_lock::OnceLock, spinlock::SpinLockIrq},
 };
 use core::{
     cmp::min,
@@ -331,6 +331,18 @@ impl<CPU: CpuOps> FrameAllocator<CPU> {
         }
     }
 
+    /// Returns the total number of pages managed by this allocator.
+    #[inline]
+    pub fn total_pages(&self) -> usize {
+        self.inner.lock_save_irq().total_pages
+    }
+
+    /// Returns the current number of free pages available for allocation.
+    #[inline]
+    pub fn free_pages(&self) -> usize {
+        self.inner.lock_save_irq().free_pages
+    }
+
     /// Initializes the frame allocator. This is the main bootstrap function.
     ///
     /// # Safety
@@ -422,8 +434,12 @@ impl<CPU: CpuOps> FrameAllocator<CPU> {
     }
 }
 
+pub trait PageAllocGetter<C: CpuOps>: Send + Sync + 'static {
+    fn global_page_alloc() -> &'static OnceLock<FrameAllocator<C>, C>;
+}
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{
         memory::{
@@ -434,13 +450,13 @@ mod tests {
         test::MockCpuOps,
     };
     use core::{alloc::Layout, mem::MaybeUninit};
-    use std::vec::Vec; // For collecting results in tests
+    use std::{mem::ManuallyDrop, ptr, vec::Vec}; // For collecting results in tests
 
     const KIB: usize = 1024;
     const MIB: usize = 1024 * KIB;
     const PAGE_SIZE: usize = 4096;
 
-    struct TestFixture {
+    pub struct TestFixture {
         allocator: FrameAllocator<MockCpuOps>,
         base_ptr: *mut u8,
         layout: Layout,
@@ -452,7 +468,7 @@ mod tests {
         /// - `mem_regions`: A slice of `(start, size)` tuples defining available memory regions.
         ///   The `start` is relative to the beginning of the allocated memory block.
         /// - `res_regions`: A slice of `(start, size)` tuples for reserved regions (e.g., kernel).
-        fn new(mem_regions: &[(usize, usize)], res_regions: &[(usize, usize)]) -> Self {
+        pub fn new(mem_regions: &[(usize, usize)], res_regions: &[(usize, usize)]) -> Self {
             // Determine the total memory size required for the test environment.
             let total_size = mem_regions
                 .iter()
@@ -529,6 +545,12 @@ mod tests {
 
         fn free_pages(&self) -> usize {
             self.allocator.inner.lock_save_irq().free_pages
+        }
+
+        pub fn leak_allocator(self) -> FrameAllocator<MockCpuOps> {
+            let this = ManuallyDrop::new(self);
+
+            unsafe { ptr::read(&this.allocator) }
         }
     }
 

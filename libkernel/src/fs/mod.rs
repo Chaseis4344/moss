@@ -25,7 +25,7 @@ use crate::{
 };
 use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
-use attr::FileAttr;
+use attr::{FileAttr, FilePermissions};
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,6 +46,7 @@ bitflags::bitflags! {
 
 // Reserved psuedo filesystem instances created internally in the kernel.
 pub const DEVFS_ID: u64 = 1;
+pub const PROCFS_ID: u64 = 2;
 pub const FS_ID_START: u64 = 10;
 
 /// Trait for a mounted filesystem instance. Its main role is to act as a
@@ -198,7 +199,7 @@ pub trait Inode: Send + Sync {
         &self,
         _name: &str,
         _file_type: FileType,
-        _permissions: u16,
+        _permissions: FilePermissions,
     ) -> Result<Arc<dyn Inode>> {
         Err(KernelError::NotSupported)
     }

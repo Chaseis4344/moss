@@ -164,10 +164,6 @@ impl<K: MemKind, T> Address<K, T> {
     pub fn is_null(self) -> bool {
         self.inner == 0
     }
-
-    pub fn to_pfn(&self) -> PageFrame {
-        PageFrame::from_pfn(self.inner >> PAGE_SHIFT)
-    }
 }
 
 impl<K: MemKind, T: Sized> Address<K, T> {
@@ -294,10 +290,14 @@ impl PA {
     pub fn cast<T>(self) -> TPA<T> {
         TPA::from_value(self.value())
     }
+
+    pub fn to_pfn(&self) -> PageFrame {
+        PageFrame::from_pfn(self.inner >> PAGE_SHIFT)
+    }
 }
 
 /// Trait for translating between physical and virtual addresses.
-pub trait AddressTranslator<T> {
+pub trait AddressTranslator<T>: 'static + Send + Sync {
     fn virt_to_phys(va: TVA<T>) -> TPA<T>;
     fn phys_to_virt(pa: TPA<T>) -> TVA<T>;
 }

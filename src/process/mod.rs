@@ -9,6 +9,7 @@ use alloc::{
     collections::btree_map::BTreeMap,
     sync::{Arc, Weak},
 };
+use core::fmt::Display;
 use creds::Credentials;
 use ctx::{Context, UserCtx};
 use fd_table::FileDescriptorTable;
@@ -100,14 +101,38 @@ impl TaskDescriptor {
     pub fn is_idle(&self) -> bool {
         self.tgid.is_idle()
     }
+
+    /// Returns the task-group ID (i.e. the PID) associated with this descriptor.
+    pub fn tgid(&self) -> Tgid {
+        self.tgid
+    }
+
+    /// Returns the thread ID associated with this descriptor.
+    pub fn tid(&self) -> Tid {
+        self.tid
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskState {
     Running,
     Runnable,
+    Stopped,
     Sleeping,
     Finished,
+}
+
+impl Display for TaskState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let state_str = match self {
+            TaskState::Running => "R",
+            TaskState::Runnable => "R",
+            TaskState::Stopped => "T",
+            TaskState::Sleeping => "S",
+            TaskState::Finished => "Z",
+        };
+        write!(f, "{}", state_str)
+    }
 }
 
 impl TaskState {
@@ -117,11 +142,33 @@ impl TaskState {
 }
 pub type ProcVM = ProcessVM<<ArchImpl as VirtualMemory>::ProcessAddressSpace>;
 
+#[derive(Copy, Clone)]
+pub struct Comm([u8; 16]);
+
+impl Comm {
+    /// Create a new command name from the given string.
+    /// Truncates to 15 characters if necessary, and null-terminates.
+    pub fn new(name: &str) -> Self {
+        let mut comm = [0u8; 16];
+        let bytes = name.as_bytes();
+        let len = core::cmp::min(bytes.len(), 15);
+        comm[..len].copy_from_slice(&bytes[..len]);
+        Self(comm)
+    }
+
+    pub fn as_str(&self) -> &str {
+        let len = self.0.iter().position(|&c| c == 0).unwrap_or(16);
+        core::str::from_utf8(&self.0[..len]).unwrap_or("")
+    }
+}
+
 pub struct Task {
     pub tid: Tid,
+    pub comm: Arc<SpinLock<Comm>>,
     pub process: Arc<ThreadGroup>,
     pub vm: Arc<SpinLock<ProcVM>>,
     pub cwd: Arc<SpinLock<(Arc<dyn Inode>, PathBuf)>>,
+    pub root: Arc<SpinLock<(Arc<dyn Inode>, PathBuf)>>,
     pub creds: SpinLock<Credentials>,
     pub fd_table: Arc<SpinLock<FileDescriptorTable>>,
     pub ctx: SpinLock<Context>,
@@ -150,10 +197,12 @@ impl Task {
 
         Self {
             tid: Tid(0),
+            comm: Arc::new(SpinLock::new(Comm::new("idle"))),
             process: thread_group_builder.build(),
             state: Arc::new(SpinLock::new(TaskState::Runnable)),
             priority: i8::MIN,
             cwd: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
+            root: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             creds: SpinLock::new(Credentials::new_root()),
             ctx: SpinLock::new(Context::from_user_ctx(user_ctx)),
             vm: Arc::new(SpinLock::new(vm)),
@@ -171,9 +220,11 @@ impl Task {
     pub fn create_init_task() -> Self {
         Self {
             tid: Tid(1),
+            comm: Arc::new(SpinLock::new(Comm::new("init"))),
             process: ThreadGroupBuilder::new(Tgid::init()).build(),
             state: Arc::new(SpinLock::new(TaskState::Runnable)),
             cwd: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
+            root: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             creds: SpinLock::new(Credentials::new_root()),
             vm: Arc::new(SpinLock::new(
                 ProcessVM::empty().expect("Could not create init process's VM"),
