@@ -14,18 +14,17 @@ impl CpuOps for super::x86_64 {
     }
 
     fn disable_interupts() -> usize {
-        let interrupt_mask: usize;
+        let mut interrupt_mask: usize;
         unsafe {
-            // TODO: Add a feature check for 64-bit mode to make sure it works
-            // and if it doesn't change lahf to use pushfd and popfd, and figure out how to
-            // retrieve mask from stack
-            //
             // This isn't perfect but should work in theory
             // We will get a CPU exception if this instruction isn't supported for a CPU
-            let cpu_id_result: usize = 0;
+            let mut cpu_id_result: usize = 0;
 
-            asm!("mov eax, 0x80000001");
-            asm!("cpuid", out("ecx") cpu_id_result);
+            asm!(
+                    "mov eax, 0x80000001",
+                    "cpuid", 
+                    out("ecx") cpu_id_result
+                );
             if cpu_id_result == 1 {
                 asm!("lahf", out("ah") interrupt_mask); //Get mask out
                 asm!("cli"); //Disable maskable interupts
@@ -45,14 +44,15 @@ impl CpuOps for super::x86_64 {
 
     fn restore_interupt_state(flags: usize) {
         unsafe {
-            //Hoping that the asm macro loads registers before execution
-            // TODO: Add a feature check for 64-bit mode to make sure it works
-            // and if it doesn't change lahf to use pushfd and popfd, and figure out how to
-            let cpu_id_result: usize = 0;
+            let mut cpu_id_result: usize = 0;
 
-            asm!("mov eax, 0x80000001");
-            asm!("cpuid", out("ecx") cpu_id_result);
+            asm!(
+                    "mov eax, 0x80000001",
+                    "cpuid", 
+                    out("ecx") cpu_id_result
+                );
             if cpu_id_result == 1 {
+            //Hoping that the asm macro loads registers before execution
                 asm!("sahf", in("ah") flags);
                 asm!("sti");
             } else {
