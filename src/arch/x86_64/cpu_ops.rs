@@ -21,10 +21,10 @@ impl CpuOps for super::x86_64 {
             let mut cpu_id_result: usize = 0;
 
             asm!(
-                    "mov eax, 0x80000001",
-                    "cpuid", 
-                    out("ecx") cpu_id_result
-                );
+                "mov eax, 0x80000001",
+                "cpuid",
+                out("ecx") cpu_id_result
+            );
             if cpu_id_result == 1 {
                 asm!("lahf", out("ah") interrupt_mask); //Get mask out
                 asm!("cli"); //Disable maskable interupts
@@ -47,12 +47,12 @@ impl CpuOps for super::x86_64 {
             let mut cpu_id_result: usize = 0;
 
             asm!(
-                    "mov eax, 0x80000001",
-                    "cpuid", 
-                    out("ecx") cpu_id_result
-                );
+                "mov eax, 0x80000001",
+                "cpuid",
+                out("ecx") cpu_id_result
+            );
             if cpu_id_result == 1 {
-            //Hoping that the asm macro loads registers before execution
+                //Hoping that the asm macro loads registers before execution
                 asm!("sahf", in("ah") flags);
                 asm!("sti");
             } else {
