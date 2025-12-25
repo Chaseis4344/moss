@@ -6,13 +6,11 @@ use core::{
 };
 
 use super::Driver;
-use crate::arch::ArchImpl;
 use crate::{
     interrupts::{InterruptDescriptor, InterruptHandler},
     sync::{OnceLock, SpinLock},
 };
 use alloc::{collections::binary_heap::BinaryHeap, sync::Arc};
-use libkernel::CpuOps;
 
 pub mod armv8_arch;
 
@@ -34,7 +32,7 @@ enum WakeupKind {
     Task(Waker),
 
     /// This wake up is for the kernel's preemption mechanism.
-    _Preempt,
+    Preempt,
 }
 
 struct WakeupEvent {
@@ -132,7 +130,7 @@ impl InterruptHandler for SysTimer {
 
                 match event.what {
                     WakeupKind::Task(waker) => waker.wake(),
-                    WakeupKind::_Preempt => todo!(),
+                    WakeupKind::Preempt => crate::sched::sched_yield(),
                 }
             } else {
                 // The next event is in the future, so we're done.
@@ -142,9 +140,9 @@ impl InterruptHandler for SysTimer {
 
         // Always re-arm: either next task/event, or a periodic/preemption tick.
         let next_deadline = wake_q.peek().map(|e| e.when).or_else(|| {
-            // fallback: schedule a preemption tick in 15 ms
-            // TODO: find a better way to do this
-            let when = self.driver.now() + Duration::from_millis(15);
+            // fallback: schedule a preemption tick in 50 ms
+            // TODO: Remove when feeling more secure about scheduling
+            let when = self.driver.now() + Duration::from_millis(50);
             Some(when)
         });
 
@@ -189,6 +187,22 @@ impl SysTimer {
             }
         })
         .await
+    }
+
+    /// Schedule a preemption event for the current CPU.
+    pub fn schedule_preempt(&self, when: Instant) {
+        let mut wake_q = self.wakeup_q.lock_save_irq();
+
+        // Insert the pre-emption event.
+        wake_q.push(WakeupEvent {
+            when,
+            what: WakeupKind::Preempt,
+        });
+
+        // Ensure the hardware timer is armed for the earliest event.
+        if let Some(next_event) = wake_q.peek() {
+            self.driver.schedule_interrupt(Some(next_event.when));
+        }
     }
 
     /// Arms the hardware timer on the current CPU so that the next scheduled
@@ -239,6 +253,14 @@ pub async fn sleep(duration: Duration) {
 pub fn kick_current_cpu() {
     if let Some(timer) = SYS_TIMER.get() {
         timer.kick_current_cpu();
+    }
+}
+
+/// Arms a pre-emption timer for the running task on this CPU.
+/// Called by the scheduler every time it issues a new eligible virtual deadline.
+pub fn schedule_preempt(when: Instant) {
+    if let Some(timer) = SYS_TIMER.get() {
+        timer.schedule_preempt(when);
     }
 }
 
