@@ -187,7 +187,7 @@ pub trait Arch: CpuOps + VirtualMemory {
 #[cfg(target_arch = "x86_64")]
 mod x86_64;
 #[cfg(target_arch = "x86_64")]
-pub use self::x86_64::Arch as ArchImpl;
+pub use self::x86_64::x86_64 as ArchImpl;
 
 #[cfg(target_arch = "aarch64")]
 mod arm64;

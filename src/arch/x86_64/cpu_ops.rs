@@ -1,7 +1,9 @@
 use libkernel::CpuOps;
 use core::arch::asm;
+use core::arch::x86_64::__cpuid;
+use core::arch::x86_64::CpuidResult;
 
-impl CpuOps for super::x86_64 {
+impl CpuOps for super::X86_64 {
     fn halt() -> ! {
         loop {
             unsafe { asm!("hlt") }
@@ -9,32 +11,29 @@ impl CpuOps for super::x86_64 {
     }
 
     fn id() -> usize {
-        //set to zero and pretend there is only 1 until x86 instructions are figured out
-        let id: usize = 0;
-        id
+        __cpuid(0x0B).EDX 
     }
 
     fn disable_interrupts() -> usize {
-        let mut interrupt_mask: usize;
+        let mut interrupt_mask: i8;
         unsafe {
             // This isn't perfect but should work in theory
             // We will get a CPU exception if this instruction isn't supported for a CPU
-            let mut cpu_id_result: usize = 0;
-
-            asm!(
-                "mov eax, 0x80000001",
-                "cpuid",
-                out("ecx") cpu_id_result
-            );
-            if cpu_id_result == 1 {
-                asm!("lahf", out("ah") interrupt_mask); //Get mask out
+            const LAHF_SUPPORT = 0x80000001;
+            let cpu_id_result: CpuidResult = __cpuid(LAHF_SUPPORT);
+            if cpu_id_result.ecx == 1 {
+                asm!("lahf",
+                    "mov ah al", 
+                    out("al") interrupt_mask); //Get mask out
                 asm!("cli"); //Disable maskable interupts
+                // interrupt_mask = interrupt_mask >> 8; //Shift right 8 bits to get high register
+                                                      //aligned with lower bits
             } else {
                 panic!("CPU does not support LAHF and SAHF")
             }
         }
 
-        interrupt_mask //return mask
+        interrupt_mask as usize //return mask
     }
 
     fn enable_interrupts() {
@@ -45,16 +44,13 @@ impl CpuOps for super::x86_64 {
 
     fn restore_interrupt_state(flags: usize) {
         unsafe {
-            let mut cpu_id_result: usize = 0;
-
-            asm!(
-                "mov eax, 0x80000001",
-                "cpuid",
-                out("ecx") cpu_id_result
-            );
-            if cpu_id_result == 1 {
+            let flags = flags as i8; // x86-64 binding only supports i8 for al
+            const LAHF_SUPPORT = 0x80000001;
+            let cpu_id_result: CpuidResult = __cpuid(LAHF_SUPPORT);
+            if cpu_id_result.ecx == 1 {
                 //Hoping that the asm macro loads registers before execution
-                asm!("sahf", in("ah") flags);
+                asm!("mov al ah",
+                    "sahf", in("al") flags);
                 asm!("sti");
             } else {
                 panic!("CPU does not support LAHF and SAHF");
