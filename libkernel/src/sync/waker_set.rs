@@ -48,15 +48,24 @@ impl WakerSet {
         id
     }
 
+    pub fn contains_token(&self, token: u64) -> bool {
+        self.waiters.contains_key(&token)
+    }
+
     /// Removes a waker using its token.
     pub fn remove(&mut self, token: u64) {
         self.waiters.remove(&token);
     }
 
     /// Wakes one waiting task, if any.
-    pub fn wake_one(&mut self) {
+    ///
+    /// Returns `true` if a waker was awoken, `false` otherwise.
+    pub fn wake_one(&mut self) -> bool {
         if let Some((_, waker)) = self.waiters.pop_first() {
             waker.wake();
+            true
+        } else {
+            false
         }
     }
 

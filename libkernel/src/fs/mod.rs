@@ -22,6 +22,7 @@ pub mod pathbuf;
 use crate::{
     driver::CharDevDescriptor,
     error::{FsError, KernelError, Result},
+    fs::{path::Path, pathbuf::PathBuf},
 };
 use alloc::{boxed::Box, string::String, sync::Arc};
 use async_trait::async_trait;
@@ -189,6 +190,11 @@ pub trait Inode: Send + Sync {
         Err(KernelError::NotSupported)
     }
 
+    /// Sets the metadata for this inode.
+    async fn setattr(&self, _attr: FileAttr) -> Result<()> {
+        Err(KernelError::NotSupported)
+    }
+
     /// Looks up a name within a directory, returning the corresponding inode.
     async fn lookup(&self, _name: &str) -> Result<Arc<dyn Inode>> {
         Err(KernelError::NotSupported)
@@ -209,8 +215,23 @@ pub trait Inode: Send + Sync {
         Err(KernelError::NotSupported)
     }
 
+    /// Creates a new link to an inode in a directory.
+    async fn link(&self, _name: &str, _inode: Arc<dyn Inode>) -> Result<()> {
+        Err(KernelError::NotSupported)
+    }
+
+    /// Creates a new symlink
+    async fn symlink(&self, _name: &str, _target: &Path) -> Result<()> {
+        Err(KernelError::NotSupported)
+    }
+
     /// Reads the contents of a directory.
     async fn readdir(&self, _start_offset: u64) -> Result<Box<dyn DirStream>> {
         Err(FsError::NotADirectory.into())
+    }
+
+    /// Reads the path of a symlink.
+    async fn readlink(&self) -> Result<PathBuf> {
+        Err(KernelError::NotSupported)
     }
 }

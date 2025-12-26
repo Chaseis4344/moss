@@ -1,4 +1,10 @@
-use std::thread;
+use std::{
+    ffi::{CStr, CString},
+    fs,
+    mem::MaybeUninit,
+    sync::{Arc, Barrier, Mutex},
+    thread,
+};
 
 fn test_sync() {
     print!("Testing sync syscall ...");
@@ -8,9 +14,22 @@ fn test_sync() {
     println!(" OK");
 }
 
+fn test_clock_sleep() {
+    use std::thread::sleep;
+    use std::time::{Duration, Instant};
+
+    const SLEEP_LEN: Duration = Duration::from_millis(100);
+
+    print!("Testing clock and sleep syscalls ...");
+    let now = Instant::now();
+    sleep(SLEEP_LEN);
+    assert!(now.elapsed() >= SLEEP_LEN);
+    println!(" OK");
+}
+
 fn test_opendir() {
     print!("Testing opendir syscall ...");
-    let path = std::ffi::CString::new("/").unwrap();
+    let path = CString::new("/").unwrap();
     unsafe {
         let dir = libc::opendir(path.as_ptr());
         if dir.is_null() {
@@ -23,7 +42,7 @@ fn test_opendir() {
 
 fn test_readdir() {
     print!("Testing readdir syscall ...");
-    let path = std::ffi::CString::new("/").unwrap();
+    let path = CString::new("/").unwrap();
     unsafe {
         let dir = libc::opendir(path.as_ptr());
         if dir.is_null() {
@@ -47,11 +66,51 @@ fn test_readdir() {
 
 fn test_chdir() {
     print!("Testing chdir syscall ...");
-    let path = std::ffi::CString::new("/").unwrap();
+    let path = CString::new("/dev").unwrap();
+    let mut buffer = [1u8; 16];
     unsafe {
         if libc::chdir(path.as_ptr()) != 0 {
             panic!("chdir failed");
         }
+        if libc::getcwd(
+            buffer.as_mut_ptr() as *mut libc::c_char,
+            buffer.len() as libc::size_t,
+        )
+        .is_null()
+        {
+            panic!("getcwd failed");
+        }
+        if CStr::from_ptr(buffer.as_ptr()).to_string_lossy() != "/dev" {
+            panic!("chdir failed");
+        }
+    }
+    println!(" OK");
+}
+
+fn test_fchdir() {
+    print!("Testing fchdir syscall ...");
+    let path = CString::new("/dev").unwrap();
+    let mut buffer = [1u8; 16];
+    unsafe {
+        let fd = libc::open(path.as_ptr(), libc::O_RDONLY);
+        if fd == -1 {
+            panic!("open failed");
+        }
+        if libc::fchdir(fd) != 0 {
+            panic!("fchdir failed");
+        }
+        if libc::getcwd(
+            buffer.as_mut_ptr() as *mut libc::c_char,
+            buffer.len() as libc::size_t,
+        )
+        .is_null()
+        {
+            panic!("getcwd failed");
+        }
+        if CStr::from_ptr(buffer.as_ptr()).to_string_lossy() != "/dev" {
+            panic!("fchdir failed");
+        }
+        libc::close(fd);
     }
     println!(" OK");
 }
@@ -59,8 +118,8 @@ fn test_chdir() {
 fn test_chroot() {
     print!("Testing chroot syscall ...");
     let file = "/bin/busybox";
-    let c_file = std::ffi::CString::new(file).unwrap();
-    let path = std::ffi::CString::new("/dev").unwrap();
+    let c_file = CString::new(file).unwrap();
+    let path = CString::new("/dev").unwrap();
     unsafe {
         if libc::chroot(path.as_ptr()) != 0 {
             panic!("chroot failed");
@@ -71,6 +130,112 @@ fn test_chroot() {
             }
         }
     }
+    println!(" OK");
+}
+
+fn test_chmod() {
+    print!("Testing chmod syscall ..."); // this actually tests fchmodat
+    let dir_path = "/tmp/chmod_test";
+    let c_dir_path = CString::new(dir_path).unwrap();
+    let mut buffer = MaybeUninit::uninit();
+
+    fs::create_dir(dir_path).expect("Failed to create directory");
+
+    let mode = libc::S_IRUSR | libc::S_IWUSR | libc::S_IXUSR;
+    unsafe {
+        if libc::chmod(c_dir_path.as_ptr(), mode) != 0 {
+            panic!("chown failed");
+        }
+        if libc::stat(c_dir_path.as_ptr(), buffer.as_mut_ptr()) != 0 {
+            panic!("stat failed");
+        }
+        if buffer.assume_init().st_mode & 0o777 != mode {
+            panic!("fchmod failed");
+        }
+    }
+    fs::remove_dir(dir_path).expect("Failed to delete directory");
+    println!(" OK");
+}
+
+fn test_fchmod() {
+    print!("Testing fchmod syscall ...");
+    let dir_path = "/tmp/fchmod_test";
+    let c_dir_path = CString::new(dir_path).unwrap();
+    let mut buffer = MaybeUninit::uninit();
+
+    fs::create_dir(dir_path).expect("Failed to create directory");
+
+    let mode = libc::S_IRUSR | libc::S_IWUSR | libc::S_IXUSR;
+    unsafe {
+        let fd = libc::open(c_dir_path.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY);
+        if fd == -1 {
+            panic!("open failed");
+        }
+        if libc::fchmod(fd, mode) != 0 {
+            panic!("fchmod failed");
+        }
+        if libc::fstat(fd, buffer.as_mut_ptr()) != 0 {
+            panic!("stat failed");
+        }
+        if buffer.assume_init().st_mode & 0o777 != mode {
+            panic!("fchmod failed");
+        }
+        libc::close(fd);
+    }
+    fs::remove_dir(dir_path).expect("Failed to delete directory");
+    println!(" OK");
+}
+
+fn test_chown() {
+    print!("Testing chown syscall ..."); // this actually tests fchownat
+    let dir_path = "/tmp/chown_test";
+    let c_dir_path = CString::new(dir_path).unwrap();
+    let mut buffer = MaybeUninit::uninit();
+
+    fs::create_dir(dir_path).expect("Failed to create directory");
+
+    unsafe {
+        if libc::chown(c_dir_path.as_ptr(), 1, 1) != 0 {
+            panic!("chown failed");
+        }
+        if libc::stat(c_dir_path.as_ptr(), buffer.as_mut_ptr()) != 0 {
+            panic!("stat failed");
+        }
+        let stat = buffer.assume_init();
+        if stat.st_uid != 1 || stat.st_gid != 1 {
+            panic!("chown failed");
+        }
+    }
+    fs::remove_dir(dir_path).expect("Failed to delete directory");
+    println!(" OK");
+}
+
+fn test_fchown() {
+    print!("Testing fchown syscall ...");
+    let dir_path = "/tmp/fchown_test";
+    let c_dir_path = CString::new(dir_path).unwrap();
+    let mut buffer = MaybeUninit::uninit();
+
+    fs::create_dir(dir_path).expect("Failed to create directory");
+
+    unsafe {
+        let fd = libc::open(c_dir_path.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY);
+        if fd == -1 {
+            panic!("open failed");
+        }
+        if libc::fchown(fd, 1, 1) != 0 {
+            panic!("fchown failed");
+        }
+        if libc::fstat(fd, buffer.as_mut_ptr()) != 0 {
+            panic!("stat failed");
+        }
+        let stat = buffer.assume_init();
+        if stat.st_uid != 1 || stat.st_gid != 1 {
+            panic!("fchown failed");
+        }
+        libc::close(fd);
+    }
+    fs::remove_dir(dir_path).expect("Failed to delete directory");
     println!(" OK");
 }
 
@@ -95,7 +260,7 @@ fn test_fork() {
 fn test_read() {
     print!("Testing read syscall ...");
     let file = "/dev/zero";
-    let c_file = std::ffi::CString::new(file).unwrap();
+    let c_file = CString::new(file).unwrap();
     let mut buffer = [1u8; 16];
     unsafe {
         let fd = libc::open(c_file.as_ptr(), libc::O_RDONLY);
@@ -115,7 +280,7 @@ fn test_read() {
 fn test_write() {
     print!("Testing write syscall ...");
     let file = "/dev/null";
-    let c_file = std::ffi::CString::new(file).unwrap();
+    let c_file = CString::new(file).unwrap();
     let data = b"Hello, world!";
     unsafe {
         let fd = libc::open(c_file.as_ptr(), libc::O_WRONLY);
@@ -128,6 +293,84 @@ fn test_write() {
         }
         libc::close(fd);
     }
+    println!(" OK");
+}
+
+fn test_link() {
+    print!("Testing link syscall ..."); // actually tests linkat
+    let path = "/tmp/link_test";
+    let link = "/tmp/link_test_link";
+    let c_path = CString::new(path).unwrap();
+    let c_link = CString::new(link).unwrap();
+    let mut stat_targetbuf = MaybeUninit::uninit();
+    let mut stat_linkbuf = MaybeUninit::uninit();
+
+    unsafe {
+        let fd = libc::open(c_path.as_ptr(), libc::O_CREAT, 0o777);
+        if fd < 0 {
+            panic!("open failed");
+        }
+        libc::close(fd);
+
+        let ret = libc::link(c_path.as_ptr(), c_link.as_ptr());
+        if ret < 0 {
+            panic!("link failed");
+        }
+        let ret = libc::stat(c_link.as_ptr(), stat_linkbuf.as_mut_ptr());
+        if ret < 0 {
+            panic!("stat failed");
+        }
+        let ret = libc::stat(c_path.as_ptr(), stat_targetbuf.as_mut_ptr());
+        if ret < 0 {
+            panic!("stat failed");
+        }
+        if stat_linkbuf.assume_init().st_ino != stat_targetbuf.assume_init().st_ino {
+            panic!("link failed");
+        }
+    }
+    fs::remove_file(path).expect("Failed to delete file");
+    fs::remove_file(link).expect("Failed to delete link");
+    println!(" OK");
+}
+
+fn test_symlink() {
+    use std::fs::{self, File};
+    use std::io::{Read, Write};
+
+    print!("Testing symlink syscall ..."); // actually tests symlinkat
+    let path = "/tmp/symlink_test";
+    let link = "/tmp/symlink_test_link";
+    let c_path = CString::new(path).unwrap();
+    let c_link = CString::new(link).unwrap();
+    let mut buffer = [1u8; 17];
+
+    let mut file = File::create_new(path).expect("Failed to create file");
+    file.write_all(b"Hello, world!")
+        .expect("Failed to write to file");
+
+    unsafe {
+        let ret = libc::symlink(c_path.as_ptr(), c_link.as_ptr());
+        if ret < 0 {
+            panic!("symlink failed");
+        }
+
+        let mut file = File::open(link).expect("Failed to open file");
+        let mut string = String::new();
+        file.read_to_string(&mut string)
+            .expect("Failed to read from file");
+        if string != "Hello, world!" {
+            panic!("symlink failed");
+        }
+        let ret = libc::readlink(c_link.as_ptr(), buffer.as_mut_ptr(), buffer.len());
+        if ret < 0 {
+            panic!("readlink failed");
+        }
+        if buffer != *b"/tmp/symlink_test" {
+            panic!("readlink failed");
+        }
+    }
+    fs::remove_file(path).expect("Failed to delete file");
+    fs::remove_file(link).expect("Failed to delete link");
     println!(" OK");
 }
 
@@ -166,6 +409,117 @@ fn test_futex() {
             panic!("futex wait did not error out as expected");
         }
     }
+    println!(" OK");
+}
+
+fn test_truncate() {
+    print!("Testing truncate syscall ...");
+    use std::fs::{self, File};
+    use std::io::{Read, Seek, Write};
+
+    let path = "/tmp/truncate_test.txt";
+    let mut file = File::create_new(path).expect("Failed to create file");
+    file.write_all(b"Hello, world!")
+        .expect("Failed to write to file");
+    unsafe {
+        libc::truncate(CString::new(path).unwrap().as_ptr(), 5);
+    }
+
+    let mut string = String::new();
+    file.rewind().expect("Failed to rewind file");
+    file.read_to_string(&mut string)
+        .expect("Failed to read from file");
+    if string != "Hello" {
+        println!("{string}");
+        panic!("truncate failed");
+    }
+
+    fs::remove_file(path).expect("Failed to delete file");
+    println!(" OK");
+}
+
+fn test_ftruncate() {
+    print!("Testing ftruncate syscall ...");
+    let file = "/tmp/ftruncate_test.txt";
+    let c_file = CString::new(file).unwrap();
+    let data = b"Hello, world!";
+    let mut buffer = [1u8; 5];
+    unsafe {
+        let fd = libc::open(c_file.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o777);
+        let ret = libc::write(fd, data.as_ptr() as *const libc::c_void, data.len());
+        if ret < 0 || ret as usize != data.len() {
+            panic!("write failed");
+        }
+        libc::ftruncate(fd, 5);
+        libc::lseek(fd, 0, libc::SEEK_SET);
+        let ret = libc::read(fd, buffer.as_mut_ptr() as *mut libc::c_void, buffer.len());
+        if ret < 0 || ret as usize != 5 {
+            panic!("read failed");
+        }
+        if &buffer != b"Hello" {
+            panic!("ftruncate failed");
+        }
+        libc::close(fd);
+    }
+    fs::remove_file(file).expect("Failed to delete file");
+    println!(" OK");
+}
+
+fn test_utimens() {
+    print!("Testing utimens syscall ...");
+    let file = "/tmp/utimens_test";
+    let c_file = CString::new(file).unwrap();
+    let mut buffer = MaybeUninit::uninit();
+
+    let mut times = [libc::timespec {
+        tv_sec: 1766620800,
+        tv_nsec: 1,
+    }; 2]; // 1 ns after dec 25 2025
+    unsafe {
+        let fd = libc::open(c_file.as_ptr(), libc::O_CREAT, 0o777);
+        if fd < 0 {
+            panic!("open failed");
+        }
+        let ret = libc::utimensat(libc::AT_FDCWD, c_file.as_ptr(), times.as_mut_ptr(), 0);
+        if ret < 0 {
+            panic!("utimensat failed");
+        }
+        let ret = libc::stat(c_file.as_ptr(), buffer.as_mut_ptr());
+        if ret < 0 {
+            panic!("stat failed");
+        }
+        let stat = buffer.assume_init();
+        if stat.st_atime != times[0].tv_sec
+            || stat.st_atime_nsec != times[0].tv_nsec
+            || stat.st_mtime != times[1].tv_sec
+            || stat.st_mtime_nsec != times[1].tv_nsec
+        {
+            panic!("utimensat failed");
+        }
+
+        times = [libc::timespec {
+            tv_sec: 1767225600,
+            tv_nsec: 5000,
+        }; 2]; // 5000 ns after jan 1 2026
+        let ret = libc::futimens(fd, times.as_mut_ptr());
+        if ret < 0 {
+            panic!("futimens failed");
+        }
+        let ret = libc::stat(c_file.as_ptr(), buffer.as_mut_ptr());
+        if ret < 0 {
+            panic!("stat failed");
+        }
+        let stat = buffer.assume_init();
+        if stat.st_atime != times[0].tv_sec
+            || stat.st_atime_nsec != times[0].tv_nsec
+            || stat.st_mtime != times[1].tv_sec
+            || stat.st_mtime_nsec != times[1].tv_nsec
+        {
+            panic!("utimensat failed");
+        }
+        libc::close(fd);
+    }
+    fs::remove_file(file).expect("Failed to delete file");
     println!(" OK");
 }
 
@@ -212,6 +566,60 @@ fn test_rust_thread() {
     println!(" OK");
 }
 
+fn test_rust_mutex() {
+    const THREADS: usize = 32;
+    const ITERS: usize = 1_000;
+
+    print!("Testing rust mutex ...");
+
+    let mtx = Arc::new(Mutex::new(0usize));
+    let barrier = Arc::new(Barrier::new(THREADS));
+
+    let mut handles = Vec::with_capacity(THREADS);
+
+    for _ in 0..THREADS {
+        let mtx = Arc::clone(&mtx);
+        let barrier = Arc::clone(&barrier);
+
+        handles.push(thread::spawn(move || {
+            barrier.wait();
+
+            for _ in 0..ITERS {
+                let mut guard = mtx.lock().unwrap();
+                *guard += 1;
+            }
+        }));
+    }
+
+    for h in handles {
+        h.join().unwrap();
+    }
+
+    let final_val = *mtx.lock().unwrap();
+
+    assert_eq!(final_val, THREADS * ITERS);
+
+    println!(" OK");
+}
+
+fn test_parking_lot_mutex_timeout() {
+    print!("Testing parking_lot mutex with timeout ...");
+    use parking_lot::Mutex;
+    use std::time::Duration;
+    let mtx = Arc::new(Mutex::new(()));
+    let mtx_clone = Arc::clone(&mtx);
+    let guard = mtx.lock();
+    // Now try to acquire the lock with a timeout in another thread
+    let handle = thread::spawn(move || {
+        let timeout = Duration::from_millis(100);
+        let result = mtx_clone.try_lock_for(timeout);
+        assert!(result.is_none(), "Expected to not acquire the lock");
+    });
+    handle.join().unwrap();
+    drop(guard);
+    println!(" OK");
+}
+
 fn run_test(test_fn: fn()) {
     // Fork a new process to run the test
     unsafe {
@@ -227,7 +635,10 @@ fn run_test(test_fn: fn()) {
             let mut status = 0;
             libc::waitpid(pid, &mut status, 0);
             if !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
-                panic!("Test failed in child process");
+                panic!(
+                    "Test failed in child process: {}",
+                    std::io::Error::last_os_error()
+                );
             }
         }
     }
@@ -237,17 +648,30 @@ fn main() {
     println!("Running userspace tests ...");
     let start = std::time::Instant::now();
     run_test(test_sync);
+    run_test(test_clock_sleep);
     run_test(test_opendir);
     run_test(test_readdir);
     run_test(test_chdir);
+    run_test(test_fchdir);
     run_test(test_chroot);
+    run_test(test_chmod);
+    run_test(test_fchmod);
+    run_test(test_chown);
+    run_test(test_fchown);
     run_test(test_fork);
     run_test(test_read);
     run_test(test_write);
+    run_test(test_link);
+    run_test(test_symlink);
     run_test(test_futex);
+    run_test(test_truncate);
+    run_test(test_ftruncate);
+    run_test(test_utimens);
     run_test(test_rust_file);
     run_test(test_rust_dir);
     run_test(test_rust_thread);
+    run_test(test_rust_mutex);
+    run_test(test_parking_lot_mutex_timeout);
     let end = std::time::Instant::now();
     println!("All tests passed in {} ms", (end - start).as_millis());
 }

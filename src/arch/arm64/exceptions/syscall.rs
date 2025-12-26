@@ -1,8 +1,3 @@
-use crate::fs::syscalls::chdir::sys_chroot;
-use crate::fs::syscalls::trunc::sys_ftruncate;
-use crate::kernel::power::sys_reboot;
-use crate::kernel::rand::sys_getrandom;
-use crate::memory::mmap::sys_mprotect;
 use crate::{
     arch::{Arch, ArchImpl},
     clock::{gettime::sys_clock_gettime, timeofday::sys_gettimeofday},
@@ -12,13 +7,20 @@ use crate::{
         syscalls::{
             at::{
                 access::{sys_faccessat, sys_faccessat2},
+                chmod::sys_fchmodat,
+                chown::sys_fchownat,
+                link::sys_linkat,
                 mkdir::sys_mkdirat,
                 open::sys_openat,
                 readlink::sys_readlinkat,
                 stat::sys_newfstatat,
+                symlink::sys_symlinkat,
                 unlink::sys_unlinkat,
+                utime::sys_utimensat,
             },
-            chdir::{sys_chdir, sys_getcwd},
+            chdir::{sys_chdir, sys_chroot, sys_fchdir, sys_getcwd},
+            chmod::sys_fchmod,
+            chown::sys_fchown,
             close::sys_close,
             ioctl::sys_ioctl,
             iov::{sys_readv, sys_writev},
@@ -27,13 +29,13 @@ use crate::{
             splice::sys_sendfile,
             stat::sys_fstat,
             sync::sys_sync,
+            trunc::{sys_ftruncate, sys_truncate},
         },
     },
-    kernel::sysinfo::sys_sysinfo,
-    kernel::uname::sys_uname,
+    kernel::{power::sys_reboot, rand::sys_getrandom, sysinfo::sys_sysinfo, uname::sys_uname},
     memory::{
         brk::sys_brk,
-        mmap::{sys_mmap, sys_munmap},
+        mmap::{sys_mmap, sys_mprotect, sys_munmap},
     },
     process::{
         clone::sys_clone,
@@ -62,9 +64,9 @@ use crate::{
             umask::sys_umask,
             wait::sys_wait4,
         },
-        threading::{sys_futex, sys_set_robust_list, sys_set_tid_address},
+        threading::{futex::sys_futex, sys_set_robust_list, sys_set_tid_address},
     },
-    sched::current_task,
+    sched::{current_task, sys_sched_yield},
 };
 use alloc::boxed::Box;
 use libkernel::{
@@ -98,10 +100,51 @@ pub async fn handle_syscall() {
         0x1d => sys_ioctl(arg1.into(), arg2 as _, arg3 as _).await,
         0x22 => sys_mkdirat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
         0x23 => sys_unlinkat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
+        0x24 => {
+            sys_symlinkat(
+                TUA::from_value(arg1 as _),
+                arg2.into(),
+                TUA::from_value(arg3 as _),
+            )
+            .await
+        }
+        0x25 => {
+            sys_linkat(
+                arg1.into(),
+                TUA::from_value(arg2 as _),
+                arg3.into(),
+                TUA::from_value(arg4 as _),
+                arg5 as _,
+            )
+            .await
+        }
+        0x2d => sys_truncate(TUA::from_value(arg1 as _), arg2 as _).await,
         0x2e => sys_ftruncate(arg1.into(), arg2 as _).await,
         0x30 => sys_faccessat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
         0x31 => sys_chdir(TUA::from_value(arg1 as _)).await,
+        0x32 => sys_fchdir(arg1.into()).await,
         0x33 => sys_chroot(TUA::from_value(arg1 as _)).await,
+        0x34 => sys_fchmod(arg1.into(), arg2 as _).await,
+        0x35 => {
+            sys_fchmodat(
+                arg1.into(),
+                TUA::from_value(arg2 as _),
+                arg3 as _,
+                arg4 as _,
+            )
+            .await
+        }
+        0x36 => {
+            sys_fchownat(
+                arg1.into(),
+                TUA::from_value(arg2 as _),
+                arg3.into(),
+                arg4.into(),
+                arg5 as _,
+            )
+            .await
+        }
+        0x37 => sys_fchown(arg1.into(), arg2.into(), arg3.into()).await,
         0x38 => {
             sys_openat(
                 arg1.into(),
@@ -169,15 +212,24 @@ pub async fn handle_syscall() {
         }
         0x50 => sys_fstat(arg1.into(), TUA::from_value(arg2 as _)).await,
         0x51 => sys_sync().await,
-        0x5d => sys_exit(arg1 as _),
+        0x58 => {
+            sys_utimensat(
+                arg1.into(),
+                TUA::from_value(arg2 as _),
+                TUA::from_value(arg3 as _),
+                arg4 as _,
+            )
+            .await
+        }
+        0x5d => sys_exit(arg1 as _).await,
         0x5e => sys_exit_group(arg1 as _),
-        0x60 => sys_set_tid_address(VA::from_value(arg1 as _)).await,
+        0x60 => sys_set_tid_address(TUA::from_value(arg1 as _)),
         0x62 => {
             sys_futex(
                 TUA::from_value(arg1 as _),
                 arg2 as _,
                 arg3 as _,
-                VA::from_value(arg4 as _),
+                TUA::from_value(arg4 as _),
                 TUA::from_value(arg5 as _),
                 arg6 as _,
             )
@@ -186,6 +238,7 @@ pub async fn handle_syscall() {
         0x63 => sys_set_robust_list(TUA::from_value(arg1 as _), arg2 as _).await,
         0x65 => sys_nanosleep(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
         0x71 => sys_clock_gettime(arg1 as _, TUA::from_value(arg2 as _)).await,
+        0x7c => sys_sched_yield(),
         0x81 => sys_kill(arg1 as _, arg2.into()),
         0x82 => sys_tkill(arg1 as _, arg2.into()),
         0x84 => sys_sigaltstack(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
@@ -255,8 +308,8 @@ pub async fn handle_syscall() {
             sys_clone(
                 arg1 as _,
                 UA::from_value(arg2 as _),
-                UA::from_value(arg3 as _),
-                UA::from_value(arg5 as _),
+                TUA::from_value(arg3 as _),
+                TUA::from_value(arg5 as _),
                 arg4 as _,
             )
             .await

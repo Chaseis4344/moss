@@ -44,7 +44,6 @@ fn schedule() {
     }
 
     let previous_task = current_task();
-    *previous_task.last_run.lock_save_irq() = now();
     let mut sched_state = SCHED_STATE.borrow_mut();
     let next_task = sched_state.find_next_runnable_task();
 
@@ -90,9 +89,15 @@ impl SchedState {
     ) -> Result<()> {
         let now_inst = now().expect("System timer not initialised");
 
+        if let Some(ref prev_task) = previous_task {
+            *prev_task.last_run.lock_save_irq() = Some(now_inst);
+        }
+
         if let Some(ref prev_task) = previous_task
             && Arc::ptr_eq(&next_task, prev_task)
         {
+            // Ensure the task state is running.
+            *next_task.state.lock_save_irq() = TaskState::Running;
             return Ok(());
         }
 
@@ -108,13 +113,10 @@ impl SchedState {
         // Record the start time for the task we are about to run.
         *next_task.exec_start.lock_save_irq() = Some(now_inst);
 
-        // Context switch.
-        if let Some(previous_task) = previous_task {
-            let mut state = previous_task.state.lock_save_irq();
-
-            if *state == TaskState::Running {
-                *state = TaskState::Runnable;
-            }
+        // Context switch, the previous task's state should already been updated
+        // prior to calling this function.
+        if let Some(ref prev_task) = previous_task {
+            debug_assert_eq!(*prev_task.state.lock_save_irq(), TaskState::Runnable);
         }
 
         *next_task.state.lock_save_irq() = TaskState::Running;
@@ -223,4 +225,9 @@ fn get_idle_task() -> Arc<Task> {
     IDLE_TASK
         .get_or_init(|| Arc::new(ArchImpl::create_idle_task()))
         .clone()
+}
+
+pub fn sys_sched_yield() -> Result<usize> {
+    schedule();
+    Ok(0)
 }

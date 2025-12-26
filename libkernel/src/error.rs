@@ -95,6 +95,9 @@ pub enum FsError {
 
     #[error("The device could not be found")]
     NoDevice,
+
+    #[error("Too many symbolic links encountered")]
+    Loop,
 }
 
 #[derive(Error, Debug, PartialEq, Eq, Clone)]
@@ -167,6 +170,9 @@ pub enum KernelError {
 
     #[error("No such process")]
     NoProcess,
+
+    #[error("Operation timed out")]
+    TimedOut,
 
     #[error("{0}")]
     Other(&'static str),

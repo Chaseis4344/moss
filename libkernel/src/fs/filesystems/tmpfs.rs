@@ -4,6 +4,8 @@ use crate::{
     fs::{
         DirStream, Dirent, FileType, Filesystem, Inode, InodeId,
         attr::{FileAttr, FilePermissions},
+        path::Path,
+        pathbuf::PathBuf,
     },
     memory::{
         PAGE_SIZE,
@@ -14,6 +16,7 @@ use crate::{
     sync::spinlock::SpinLockIrq,
 };
 use alloc::{
+    borrow::ToOwned,
     boxed::Box,
     string::{String, ToString},
     sync::{Arc, Weak},
@@ -113,6 +116,7 @@ where
     T: AddressTranslator<()>,
 {
     id: InodeId,
+    attr: SpinLockIrq<FileAttr, C>,
     inner: SpinLockIrq<TmpFsRegInner<C, G, T>, C>,
 }
 
@@ -125,6 +129,12 @@ where
     fn new(id: InodeId) -> Result<Self> {
         Ok(Self {
             id,
+            attr: SpinLockIrq::new(FileAttr {
+                file_type: FileType::File,
+                size: 0,
+                nlinks: 1,
+                ..Default::default()
+            }),
             inner: SpinLockIrq::new(TmpFsRegInner {
                 indirect_block: ClaimedPage::<C, G, T>::alloc_zeroed()?,
                 size: 0,
@@ -228,6 +238,7 @@ where
         if offset as usize > inner.size {
             inner.size = offset as usize;
         }
+        self.attr.lock_save_irq().size = inner.size as _;
 
         Ok(total_written)
     }
@@ -246,6 +257,7 @@ where
             // read_at logic, and write_at will fill them with zeroed pages when
             // touched.
             inner.size = new_size;
+            self.attr.lock_save_irq().size = size;
             return Ok(());
         }
 
@@ -297,17 +309,19 @@ where
 
             inner.size = new_size;
         }
+        self.attr.lock_save_irq().size = inner.size as _;
 
         Ok(())
     }
 
     async fn getattr(&self) -> Result<FileAttr> {
-        let inner = self.inner.lock_save_irq();
-        Ok(FileAttr {
-            size: inner.size as u64,
-            // Populate other fields (perms, time) with defaults or store them in TmpFsReg
-            ..Default::default()
-        })
+        Ok(self.attr.lock_save_irq().clone())
+    }
+
+    async fn setattr(&self, attr: FileAttr) -> Result<()> {
+        self.inner.lock_save_irq().size = attr.size as _;
+        *self.attr.lock_save_irq() = attr;
+        Ok(())
     }
 }
 
@@ -325,7 +339,7 @@ where
     T: AddressTranslator<()>,
 {
     entries: SpinLockIrq<Vec<TmpFsDirEnt>, C>,
-    attrs: FileAttr,
+    attrs: SpinLockIrq<FileAttr, C>,
     id: u64,
     fs: Weak<TmpFs<C, G, T>>,
     this: Weak<Self>,
@@ -388,7 +402,12 @@ where
     }
 
     async fn getattr(&self) -> Result<FileAttr> {
-        Ok(self.attrs.clone())
+        Ok(self.attrs.lock_save_irq().clone())
+    }
+
+    async fn setattr(&self, attr: FileAttr) -> Result<()> {
+        *self.attrs.lock_save_irq() = attr;
+        Ok(())
     }
 
     async fn readdir(&self, start_offset: u64) -> Result<Box<dyn DirStream>> {
@@ -441,6 +460,51 @@ where
             Err(FsError::NotFound.into())
         }
     }
+
+    async fn link(&self, name: &str, inode: Arc<dyn Inode>) -> Result<()> {
+        let mut attr = inode.getattr().await?;
+        let kind = attr.file_type;
+        attr.nlinks += 1;
+        inode.setattr(attr).await?;
+
+        let mut entries = self.entries.lock_save_irq();
+
+        if entries.iter().any(|e| e.name == name) {
+            return Err(FsError::AlreadyExists.into());
+        }
+
+        entries.push(TmpFsDirEnt {
+            name: name.to_string(),
+            id: inode.id(),
+            kind,
+            inode,
+        });
+
+        Ok(())
+    }
+
+    async fn symlink(&self, name: &str, target: &Path) -> Result<()> {
+        let mut entries = self.entries.lock_save_irq();
+
+        if entries.iter().any(|e| e.name == name) {
+            return Err(FsError::AlreadyExists.into());
+        }
+
+        let fs = self.fs.upgrade().ok_or(FsError::InvalidFs)?;
+        let new_id = fs.alloc_inode_id();
+        let inode_id = InodeId::from_fsid_and_inodeid(fs.id(), new_id);
+
+        let inode = Arc::new(TmpFsSymlinkInode::<C>::new(inode_id, target.to_owned())?);
+
+        entries.push(TmpFsDirEnt {
+            name: name.to_string(),
+            id: inode.id(),
+            kind: FileType::Symlink,
+            inode,
+        });
+
+        Ok(())
+    }
 }
 
 impl<C, G, T> TmpFsDirInode<C, G, T>
@@ -452,16 +516,57 @@ where
     pub fn new(id: u64, fs: Weak<TmpFs<C, G, T>>, mode: FilePermissions) -> Arc<Self> {
         Arc::new_cyclic(|weak_this| Self {
             entries: SpinLockIrq::new(Vec::new()),
-            attrs: FileAttr {
+            attrs: SpinLockIrq::new(FileAttr {
                 size: 0,
                 file_type: FileType::Directory,
                 block_size: BLOCK_SZ as _,
                 mode,
                 ..Default::default()
-            },
+            }),
             id,
             fs,
             this: weak_this.clone(),
+        })
+    }
+}
+
+struct TmpFsSymlinkInode<C: CpuOps> {
+    id: InodeId,
+    target: PathBuf,
+    attr: SpinLockIrq<FileAttr, C>,
+}
+
+#[async_trait]
+impl<C: CpuOps> Inode for TmpFsSymlinkInode<C> {
+    fn id(&self) -> InodeId {
+        self.id
+    }
+
+    async fn getattr(&self) -> Result<FileAttr> {
+        Ok(self.attr.lock_save_irq().clone())
+    }
+
+    async fn setattr(&self, attr: FileAttr) -> Result<()> {
+        *self.attr.lock_save_irq() = attr;
+        Ok(())
+    }
+
+    async fn readlink(&self) -> Result<PathBuf> {
+        Ok(self.target.clone())
+    }
+}
+
+impl<C: CpuOps> TmpFsSymlinkInode<C> {
+    fn new(id: InodeId, target: PathBuf) -> Result<Self> {
+        Ok(Self {
+            id,
+            target,
+            attr: SpinLockIrq::new(FileAttr {
+                file_type: FileType::Symlink,
+                size: 0,
+                nlinks: 1,
+                ..Default::default()
+            }),
         })
     }
 }
