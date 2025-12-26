@@ -1,4 +1,5 @@
 use libkernel::CpuOps;
+use core::arch::asm;
 
 impl CpuOps for super::x86_64 {
     fn halt() -> ! {
@@ -13,7 +14,7 @@ impl CpuOps for super::x86_64 {
         id
     }
 
-    fn disable_interupts() -> usize {
+    fn disable_interrupts() -> usize {
         let mut interrupt_mask: usize;
         unsafe {
             // This isn't perfect but should work in theory
@@ -36,13 +37,13 @@ impl CpuOps for super::x86_64 {
         interrupt_mask //return mask
     }
 
-    fn enable_interupts() {
+    fn enable_interrupts() {
         unsafe {
             asm!("sti"); //Set interrupt flag
         }
     }
 
-    fn restore_interupt_state(flags: usize) {
+    fn restore_interrupt_state(flags: usize) {
         unsafe {
             let mut cpu_id_result: usize = 0;
 
