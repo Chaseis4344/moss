@@ -1,0 +1,880 @@
+    Checking moss v0.1.0 (/home/Chaseis4344/Projects/Rust/moss)
+error[E0432]: unresolved import `crate::ArchImpl`
+ --> src/kernel/power.rs:1:13
+  |
+1 | use crate::{ArchImpl, arch::Arch};
+  |             ^^^^^^^^ no `ArchImpl` in the root
+  |
+  = help: consider importing this unresolved item through its public re-export instead:
+          crate::arch::ArchImpl
+
+error[E0603]: trait import `Arch` is private
+   --> src/arch/mod.rs:158:23
+    |
+158 | pub use self::x86_64::Arch as ArchImpl;
+    |                       ^^^^ private trait import
+    |
+note: the trait import `Arch` is defined here...
+   --> src/arch/x86_64/mod.rs:1:5
+    |
+  1 | use super::Arch;
+    |     ^^^^^^^^^^^
+note: ...and refers to the trait `Arch` which is defined here
+   --> src/arch/mod.rs:22:1
+    |
+ 22 | pub trait Arch: CpuOps + VirtualMemory {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ you could import this directly
+
+error: no global memory allocator found but one is required; link to std or add `#[global_allocator]` to a static item that implements the GlobalAlloc trait
+
+warning: unused import: `Arch`
+  --> src/main.rs:11:12
+   |
+11 | use arch::{Arch, ArchImpl};
+   |            ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `CpuOps` and `VirtualMemory`
+  --> src/main.rs:17:5
+   |
+17 |     CpuOps, VirtualMemory,
+   |     ^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused imports: `CpuOps`, `UA`, `VA`, `VirtualMemory`, and `error::Result`
+ --> src/arch/x86_64/mod.rs:3:5
+  |
+3 |     CpuOps, VirtualMemory,
+  |     ^^^^^^  ^^^^^^^^^^^^^
+4 |     error::Result,
+  |     ^^^^^^^^^^^^^
+5 |     memory::address::{UA, VA},
+  |                       ^^  ^^
+
+warning: type `x86_64` should have an upper camel case name
+  --> src/arch/x86_64/mod.rs:20:12
+   |
+20 | pub struct x86_64 {}
+   |            ^^^^^^ help: convert the identifier to upper camel case (notice the capitalization): `X86_64`
+   |
+   = note: `#[warn(non_camel_case_types)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: unused import: `VirtualMemory`
+  --> src/drivers/uart/imx_lp.rs:15:23
+   |
+15 |     KernAddressSpace, VirtualMemory,
+   |                       ^^^^^^^^^^^^^
+
+warning: unused import: `VirtualMemory`
+  --> src/drivers/uart/pl011.rs:16:23
+   |
+16 |     KernAddressSpace, VirtualMemory,
+   |                       ^^^^^^^^^^^^^
+
+warning: unused import: `CpuOps`
+  --> src/interrupts/cpu_messenger.rs:11:5
+   |
+11 |     CpuOps,
+   |     ^^^^^^
+
+warning: unused import: `arch::Arch`
+ --> src/kernel/power.rs:1:23
+  |
+1 | use crate::{ArchImpl, arch::Arch};
+  |                       ^^^^^^^^^^
+
+warning: unused import: `Arch`
+ --> src/kernel/uname.rs:2:12
+  |
+2 |     arch::{Arch, ArchImpl},
+  |            ^^^^
+
+warning: unused import: `Arch`
+ --> src/memory/uaccess.rs:3:19
+  |
+3 | use crate::arch::{Arch, ArchImpl};
+  |                   ^^^^
+
+warning: unused import: `Arch`
+ --> src/memory/uaccess/cstr.rs:5:19
+  |
+5 | use crate::arch::{Arch, ArchImpl};
+  |                   ^^^^
+
+warning: unused import: `Arch`
+ --> src/sched/mod.rs:3:12
+  |
+3 |     arch::{Arch, ArchImpl},
+  |            ^^^^
+
+warning: unused import: `Arch`
+ --> src/sched/uspc_ret.rs:4:12
+  |
+4 |     arch::{Arch, ArchImpl},
+  |            ^^^^
+
+error[E0046]: not all trait items implemented, missing: `PageTableRoot`, `ProcessAddressSpace`, `KernelAddressSpace`, `PAGE_OFFSET`, `kern_address_space`
+ --> src/arch/x86_64/virtual_memory.rs:4:1
+  |
+4 | impl VirtualMemory for x86_64 {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `PageTableRoot`, `ProcessAddressSpace`, `KernelAddressSpace`, `PAGE_OFFSET`, `kern_address_space` in implementation
+  |
+  = help: implement the missing item: `type PageTableRoot = /* Type */;`
+  = help: implement the missing item: `type ProcessAddressSpace = /* Type */;`
+  = help: implement the missing item: `type KernelAddressSpace = /* Type */;`
+  = help: implement the missing item: `const PAGE_OFFSET: usize = 42;`
+  = help: implement the missing item: `fn kern_address_space() -> &'static SpinLockIrq<<Self as VirtualMemory>::KernelAddressSpace, Self> { todo!() }`
+
+error[E0046]: not all trait items implemented, missing: `UserContext`, `new_user_context`, `context_switch`, `create_idle_task`, `restart`, `do_signal`, `do_signal_return`, `copy_from_user`, `copy_to_user`, `copy_strn_from_user`
+   --> src/arch/x86_64/mod.rs:21:1
+    |
+ 21 |   impl Arch for x86_64 {
+    |   ^^^^^^^^^^^^^^^^^^^^ missing `UserContext`, `new_user_context`, `context_switch`, `create_idle_task`, `restart`, `do_signal`, `do_signal_return`, `copy_from_user`, `copy_to_user`, `copy_strn_from_user` in implementation
+    |
+   ::: src/arch/mod.rs:26:5
+    |
+ 26 |       type UserContext: Sized + Send + Sync + Clone;
+    |       --------------------------------------------- `UserContext` from trait
+...
+ 33 |       fn new_user_context(entry_point: VA, stack_top: VA) -> Self::UserContext;
+    |       ------------------------------------------------------------------------- `new_user_context` from trait
+...
+ 37 |       fn context_switch(new: Arc<Task>);
+    |       ---------------------------------- `context_switch` from trait
+...
+ 40 |       fn create_idle_task() -> Task;
+    |       ------------------------------ `create_idle_task` from trait
+...
+ 46 |       fn restart() -> !;
+    |       ------------------ `restart` from trait
+...
+ 49 | /     fn do_signal(
+ 50 | |         sig: SigId,
+ 51 | |         action: UserspaceSigAction,
+ 52 | |     ) -> impl Future<Output = Result<<Self as Arch>::UserContext>>;
+    | |___________________________________________________________________- `do_signal` from trait
+...
+ 55 |       fn do_signal_return() -> impl Future<Output = Result<<Self as Arch>::UserContext>>;
+    |       ----------------------------------------------------------------------------------- `do_signal_return` from trait
+...
+ 85 | /     unsafe fn copy_from_user(src: UA, dst: *mut (), len: usize)
+ 86 | |     -> impl Future<Output = Result<()>>;
+    | |________________________________________- `copy_from_user` from trait
+...
+121 | /     unsafe fn copy_to_user(src: *const (), dst: UA, len: usize)
+122 | |     -> impl Future<Output = Result<()>>;
+    | |________________________________________- `copy_to_user` from trait
+...
+149 | /     unsafe fn copy_strn_from_user(
+150 | |         src: UA,
+151 | |         dst: *mut u8,
+152 | |         len: usize,
+153 | |     ) -> impl Future<Output = Result<usize>>;
+    | |_____________________________________________- `copy_strn_from_user` from trait
+
+error[E0282]: type annotations needed
+   --> src/drivers/timer/mod.rs:212:9
+    |
+212 |         timer.sleep(duration).await
+    |         ^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/fs/dir.rs:136:28
+    |
+136 |     let mut entries_iter = ops.readdir(ctx).await?;
+    |                            ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/fs/dir.rs:136:9
+    |
+136 |     let mut entries_iter = ops.readdir(ctx).await?;
+    |         ^^^^^^^^^^^^^^^^
+...
+142 |     while let Some(de) = entries_iter.peek() {
+    |                          ------------ type must be known at this point
+    |
+help: consider giving `entries_iter` an explicit type
+    |
+136 |     let mut entries_iter: /* Type */ = ops.readdir(ctx).await?;
+    |                         ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/fs/dir.rs:162:27
+    |
+162 |         let consumed_de = entries_iter.next().await?.unwrap();
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/open_file.rs:63:32
+   |
+63 |                 let read_fut = ops.poll_read_ready();
+   |                                ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/open_file.rs:66:43
+   |
+66 | ...   Box::pin(async move { read_fut.await.map(|_| PollFlags::POLL...
+   |                             ^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/open_file.rs:75:21
+   |
+75 |                     write_fut.await.map(|_| PollFlags::POLLOUT)
+   |                     ^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/open_file.rs:89:23
+   |
+89 |                 match fut.as_mut().poll(cx) {
+   |                       ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/close.rs:12:25
+   |
+12 |     if let Some(file) = Arc::into_inner(file) {
+   |                         ^^^^^^^^^^^^^^^ cannot infer type of the type parameter `T` declared on the struct `Arc`
+13 |         let (ops, ctx) = &mut *file.lock().await;
+   |                                ---- type must be known at this point
+   |
+help: consider specifying the generic arguments
+   |
+12 |     if let Some(file) = Arc::<T, A>::into_inner(file) {
+   |                            ++++++++
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/close.rs:14:9
+   |
+14 |         ops.release(ctx).await?;
+   |         ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/ioctl.rs:12:5
+   |
+12 |     ops.ioctl(ctx, request, arg).await
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/iov.rs:32:5
+   |
+32 |     ops.writev(state, &iovs).await
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/iov.rs:46:5
+   |
+46 |     ops.readv(state, &iovs).await
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/rw.rs:16:5
+   |
+16 |     ops.write(ctx, user_buf, count).await
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/rw.rs:28:5
+   |
+28 |     ops.read(ctx, user_buf, count).await
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/seek.rs:27:5
+   |
+27 |     ops.seek(ctx, seek_from).await.map(|x| x as _)
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/seek.rs:27:5
+   |
+27 |     ops.seek(ctx, seek_from).await.map(|x| x as _)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/splice.rs:24:8
+   |
+24 |     if Arc::ptr_eq(&reader, &writer) {
+   |        ^^^^^^^^^^^ cannot infer type of the type parameter `T` declared on the struct `Arc`
+...
+30 |     let (reader_ops, reader_ctx) = &mut *reader.lock().await;
+   |                                          ------ type must be known at this point
+   |
+help: consider specifying the generic arguments
+   |
+24 |     if Arc::<T, A>::ptr_eq(&reader, &writer) {
+   |           ++++++++
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/splice.rs:36:20
+   |
+36 | ...   let read = reader_ops.splice_into(reader_ctx, &kbuf, count)....
+   |                  ^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/splice.rs:45:27
+   |
+45 | ...   let written = writer_ops.splice_from(writer_ctx, &kbuf, to_w...
+   |                     ^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/stat.rs:16:9
+   |
+16 |     let attr = inode.getattr().await?;
+   |         ^^^^
+17 |
+18 |     copy_to_user(statbuf, attr.into()).await?;
+   |                           ---- type must be known at this point
+   |
+help: consider giving `attr` an explicit type
+   |
+16 |     let attr: /* Type */ = inode.getattr().await?;
+   |             ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/trunc.rs:13:5
+   |
+13 |     ops.truncate(ctx, new_size).await.map(|_| 0)
+   |     ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/fs/syscalls/trunc.rs:13:5
+   |
+13 |     ops.truncate(ctx, new_size).await.map(|_| 0)
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/fs/mod.rs:472:21
+    |
+472 |             let _ = fs.sync().await;
+    |                     ^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/memory/brk.rs:37:27
+   |
+37 |         Ok(new_brk) => Ok(new_brk.value()),
+   |                           ^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/process/clone.rs:87:32
+   |
+87 |                     .and_then(|p| p.upgrade())
+   |                                ^  - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+87 |                     .and_then(|p: /* Type */| p.upgrade())
+   |                                 ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/fd_table/fcntl.rs:24:28
+   |
+24 |                 .and_then(|entry| entry.as_ref())
+   |                            ^^^^^  ----- type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+24 |                 .and_then(|entry: /* Type */| entry.as_ref())
+   |                                 ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/fd_table/fcntl.rs:33:28
+   |
+33 |                 .and_then(|entry| entry.as_mut())
+   |                            ^^^^^  ----- type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+33 |                 .and_then(|entry: /* Type */| entry.as_mut())
+   |                                 ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/fd_table/fcntl.rs:49:32
+   |
+49 |                     .and_then(|entry| entry.as_mut())
+   |                                ^^^^^  ----- type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+49 |                     .and_then(|entry: /* Type */| entry.as_mut())
+   |                                     ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/fd_table/fcntl.rs:55:16
+   |
+55 |             Ok(open_fd.flags().await.bits() as _)
+   |                ^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/process/fd_table/select.rs:94:17
+   |
+94 |                 ops.poll_read_ready().await
+   |                 ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/process/fd_table/select.rs:194:24
+    |
+194 |         let poll_fut = open_file.poll(poll_fd.events).await;
+    |                        ^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/process/thread_group/rsrc_lim.rs:200:24
+    |
+200 |             .and_then(|x| x.upgrade())
+    |                        ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+200 |             .and_then(|x: /* Type */| x.upgrade())
+    |                         ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/process/thread_group/signal/sigaltstack.rs:100:20
+    |
+100 |                 && old_ss.in_use()
+    |                    ^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/process/thread_group/wait.rs:146:22
+    |
+146 |         .wait_until(|state| {
+    |                      ^^^^^
+147 |             let key = if pid == -1 {
+148 |                 state.iter().find_map(|(k, v)| {
+    |                 ----- type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+146 |         .wait_until(|state: /* Type */| {
+    |                           ++++++++++++
+
+error[E0282]: type annotations needed for `(_, _)`
+   --> src/process/thread_group/wait.rs:148:40
+    |
+148 |                 state.iter().find_map(|(k, v)| {
+    |                                        ^^^^^^
+149 |                     if v.matches_wait_flags(flags) {
+    |                        - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type, where the placeholders `_` are specified
+    |
+148 |                 state.iter().find_map(|(k, v): (_, _)| {
+    |                                              ++++++++
+
+error[E0282]: type annotations needed for `(_, _)`
+   --> src/process/thread_group/wait.rs:158:32
+    |
+158 |                     .and_then(|(k, v)| {
+    |                                ^^^^^^
+159 |                         if v.matches_wait_flags(flags) {
+    |                            - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type, where the placeholders `_` are specified
+    |
+158 |                     .and_then(|(k, v): (_, _)| {
+    |                                      ++++++++
+
+error[E0282]: type annotations needed for `(_, ChildState)`
+   --> src/process/thread_group/wait.rs:142:9
+    |
+142 |     let (tgid, child_state) = task
+    |         ^^^^^^^^^^^^^^^^^^^
+...
+192 |     Ok(tgid.value() as _)
+    |        ---- type must be known at this point
+    |
+help: consider giving this pattern a type, where the placeholders `_` are specified
+    |
+142 |     let (tgid, child_state): (_, _) = task
+    |                            ++++++++
+
+error[E0282]: type annotations needed
+   --> src/process/threading.rs:138:42
+    |
+138 | ...   && let Some(waitq_arc) = table.lock_save_irq().get(&uaddr)....
+    |                                ^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/process/threading.rs:140:33
+    |
+140 |                 let mut waitq = waitq_arc.lock_save_irq();
+    |                                 ^^^^^^^^^ cannot infer type
+
+error: cannot use register `ah`: high byte registers cannot be used as an operand on x86_64
+  --> src/arch/x86_64/cpu_ops.rs:30:30
+   |
+30 | ...   asm!("lahf", out("ah") interrupt_mask); //Get mask out
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: cannot use register `ah`: high byte registers cannot be used as an operand on x86_64
+  --> src/arch/x86_64/cpu_ops.rs:57:30
+   |
+57 |                 asm!("sahf", in("ah") flags);
+   |                              ^^^^^^^^^^^^^^
+
+error[E0308]: mismatched types
+  --> src/clock/realtime.rs:14:37
+   |
+14 |         let duraton_since_ep_info = now - ep_info.1;
+   |                                     ^^^^^^^^^^^^^^^ expected `Instant`, found `Duration`
+
+error[E0599]: no method named `try_push` found for struct `KBuf<u8>` in the current scope
+  --> src/console/tty/cooker.rs:53:27
+   |
+53 |             if cooked_buf.try_push(byte).is_ok()
+   |                           ^^^^^^^^ method not found in `KBuf<u8>`
+   |
+  ::: src/kernel/kpipe.rs:34:1
+   |
+34 | pub struct KBuf<T> {
+   | ------------------ method `try_push` not found for this struct
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following trait defines an item `try_push`, perhaps you need to implement it:
+           candidate #1: `Producer`
+
+error[E0599]: no method named `try_push_slice` found for struct `KBuf<u8>` in the current scope
+  --> src/console/tty/cooker.rs:74:32
+   |
+74 |                     cooked_buf.try_push_slice(line_buf);
+   |                                ^^^^^^^^^^^^^^ method not found in `KBuf<u8>`
+   |
+  ::: src/kernel/kpipe.rs:34:1
+   |
+34 | pub struct KBuf<T> {
+   | ------------------ method `try_push_slice` not found for this struct
+
+error[E0599]: no method named `try_push_slice` found for struct `KBuf<u8>` in the current scope
+   --> src/console/tty/cooker.rs:109:36
+    |
+109 |                         cooked_buf.try_push_slice(line_buf);
+    |                                    ^^^^^^^^^^^^^^ method not found in `KBuf<u8>`
+    |
+   ::: src/kernel/kpipe.rs:34:1
+    |
+ 34 | pub struct KBuf<T> {
+    | ------------------ method `try_push_slice` not found for this struct
+
+error[E0282]: type annotations needed
+   --> src/console/tty.rs:103:24
+    |
+103 |         let copy_fut = cooked_pipe.copy_to_user(usr_buf, count);
+    |                        ^^^^^^^^^^^ cannot infer type
+
+error[E0599]: no method named `pop_slice` found for reference `&'life2 KBuf<u8>` in the current scope
+   --> src/console/tty.rs:227:35
+    |
+227 |             let bytes_read = kbuf.pop_slice(&mut buf).await;
+    |                                   ^^^^^^^^^ method not found in `&'life2 KBuf<u8>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `pop_slice`, perhaps you need to implement it:
+            candidate #1: `Consumer`
+
+error[E0282]: type annotations needed
+   --> src/drivers/fs/dev.rs:138:27
+    |
+138 |                     .map(|inode| inode.clone() as Arc<dyn Inode>)
+    |                           ^^^^^  ----- type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+138 |                     .map(|inode: /* Type */| inode.clone() as Arc<dyn Inode>)
+    |                                ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/drivers/fs/proc.rs:109:51
+    |
+109 | ...keys().any(|d| d.tgid() == pid) {
+    |                ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+109 |         if !TASK_LIST.lock_save_irq().keys().any(|d: /* Type */| d.tgid() == pid) {
+    |                                                    ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/drivers/fs/proc.rs:129:24
+    |
+129 |             let name = desc.tgid().value().to_string();
+    |                        ^^^^ cannot infer type
+
+error[E0282]: type annotations needed for `(_, _)`
+   --> src/drivers/fs/proc.rs:291:41
+    |
+291 | ....find(|(desc, _)| desc.tgid() == pid);
+    |           ^^^^^^^^^  ---- type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type, where the placeholders `_` are specified
+    |
+291 |         let id = task_list.iter().find(|(desc, _): (_, _)| desc.tgid() == pid);
+    |                                                  ++++++++
+
+error[E0282]: type annotations needed
+   --> src/drivers/interrupts/arm_gic_v2.rs:366:37
+    |
+366 | ...   unsafe { &mut *(distributor_mem.value() as *mut GicDistribu...
+    |                       ^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/drivers/interrupts/arm_gic_v2.rs:367:37
+    |
+367 | ...   unsafe { &mut *(cpu_mem.value() as *mut GicCpuInterfaceRegs...
+    |                       ^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/drivers/timer/mod.rs:194:15
+    |
+194 |         .map(|timer| timer.uptime())
+    |               ^^^^^  ----- type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+194 |         .map(|timer: /* Type */| timer.uptime())
+    |                    ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/drivers/uart/mod.rs:160:28
+    |
+160 |                 .and_then(|h| h.upgrade())
+    |                            ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+160 |                 .and_then(|h: /* Type */| h.upgrade())
+    |                             ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/drivers/uart/mod.rs:166:31
+    |
+166 |                 .for_each(|b| handler.push_byte(b))
+    |                               ^^^^^^^ cannot infer type
+
+error[E0599]: no method named `push_slice` found for reference `&'life2 KBuf<u8>` in the current scope
+   --> src/fs/reg.rs:152:32
+    |
+152 |             let written = kbuf.push_slice(data_to_write).await;
+    |                                ^^^^^^^^^^ method not found in `&'life2 KBuf<u8>`
+    |
+    = help: items from traits can only be used if the trait is implemented and in scope
+    = note: the following trait defines an item `push_slice`, perhaps you need to implement it:
+            candidate #1: `Producer`
+
+error[E0282]: type annotations needed
+   --> src/interrupts/mod.rs:160:24
+    |
+160 |             let desc = ctx.descriptor();
+    |                        ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/interrupts/mod.rs:163:32
+    |
+163 |                     Some(x) => x.handle_irq(ctx.descriptor()),
+    |                                ^ cannot infer type
+
+error[E0308]: mismatched types
+    --> src/kernel/uname.rs:29:43
+     |
+  29 |         dest_slice[..len].copy_from_slice(&src[..len]);
+     |                           --------------- ^^^^^^^^^^^ expected `&[i8]`, found `&[u8]`
+     |                           |
+     |                           arguments to this method are incorrect
+     |
+     = note: expected reference `&[i8]`
+                found reference `&[u8]`
+note: method defined here
+    --> /home/Chaseis4344/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/slice/mod.rs:3892:18
+     |
+3892 |     pub const fn copy_from_slice(&mut self, src: &[T])
+     |                  ^^^^^^^^^^^^^^^
+
+error[E0282]: type annotations needed
+  --> src/memory/fault.rs:45:15
+   |
+45 |       let vma = match vm.find_vma_for_fault(faulting_addr, access_...
+   |  _______________^
+46 | |         Some(vma) => vma,
+47 | |         None => return Ok(FaultResolution::Denied),
+48 | |     }
+   | |_____^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/process/exit.rs:23:20
+   |
+23 |         .and_then(|x| x.upgrade())
+   |                    ^  - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+23 |         .and_then(|x: /* Type */| x.upgrade())
+   |                     ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/exit.rs:45:37
+   |
+45 |         if let Some(other_thread) = thread_weak.upgrade() {
+   |                                     ^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/process/exit.rs:68:40
+   |
+68 | ...children: Vec<_> = core::mem::take(&mut *our_children).into_ite...
+   |                       ^^^^^^^^^^^^^^^ cannot infer type of the type parameter `T` declared on the function `take`
+   |
+help: consider specifying the generic argument
+   |
+68 |         let mut our_children: Vec<_> = core::mem::take::<T>(&mut *our_children).into_iter().collect();
+   |                                                       +++++
+
+error[E0282]: type annotations needed
+   --> src/process/exit.rs:110:18
+    |
+110 |         .filter(|t| t.upgrade().is_some())
+    |                  ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+110 |         .filter(|t: /* Type */| t.upgrade().is_some())
+    |                   ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/thread_group/pid.rs:21:20
+   |
+21 |         .and_then(|x| x.upgrade())
+   |                    ^  - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+21 |         .and_then(|x: /* Type */| x.upgrade())
+   |                     ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/thread_group/signal/kill.rs:41:35
+   |
+41 |                 if let Some(tg) = tg_weak.upgrade()
+   |                                   ^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/process/thread_group/signal/kill.rs:55:35
+   |
+55 |                 if let Some(tg) = tg_weak.upgrade()
+   |                                   ^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/process/thread_group/signal/kill.rs:88:24
+   |
+88 |             .and_then(|t| t.upgrade())
+   |                        ^  - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+88 |             .and_then(|t: /* Type */| t.upgrade())
+   |                         ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/process/thread_group/wait.rs:90:28
+   |
+90 |         self.inner.update(|state| {
+   |                            ^^^^^
+91 |             state.insert(tgid, new_state);
+   |             ----- type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+90 |         self.inner.update(|state: /* Type */| {
+   |                                 ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/process/thread_group.rs:152:52
+    |
+152 |         TG_LIST.lock_save_irq().get(&id).and_then(|x| x.upgrade())
+    |                                                    ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+152 |         TG_LIST.lock_save_irq().get(&id).and_then(|x: /* Type */| x.upgrade())
+    |                                                     ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/sched/uspc_ret.rs:96:27
+   |
+96 |                     match signal_work
+   |                           ^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/sched/uspc_ret.rs:133:27
+    |
+133 |                     match kern_work
+    |                           ^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/sched/uspc_ret.rs:211:44
+    |
+211 | ...                   .and_then(|p| p.upgrade())
+    |                                  ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+211 |                                 .and_then(|p: /* Type */| p.upgrade())
+    |                                             ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src/sched/uspc_ret.rs:220:52
+    |
+220 | ...                   if let Some(thr) = thr_weak.upgrade() {
+    |                                          ^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/sched/uspc_ret.rs:233:52
+    |
+233 | ...                   if let Some(thr) = thr_weak.upgrade() {
+    |                                          ^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/sched/uspc_ret.rs:246:44
+    |
+246 | ...                   .and_then(|p| p.upgrade())
+    |                                  ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+246 |                                 .and_then(|p: /* Type */| p.upgrade())
+    |                                             ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src/sched/waker.rs:13:29
+   |
+13 |         && let Some(proc) = proc.upgrade()
+   |                             ^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src/sched/waker.rs:15:25
+   |
+15 |         let mut state = proc.lock_save_irq();
+   |                         ^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src/sched/mod.rs:155:49
+    |
+155 |                         (Some(t1), Some(t2)) => t1.cmp(&t2),
+    |                                                 ^^ cannot infer type
+
+error[E0308]: mismatched types
+  --> src/main.rs:46:34
+   |
+46 | fn on_panic(info: &PanicInfo) -> ! {
+   |    --------                      ^ expected `!`, found `()`
+   |    |
+   |    implicitly returns `()` as its body has no tail or `return` expression
+   |
+   = note:   expected type `!`
+           found unit type `()`
+
+warning: unused import: `Arch`
+ --> src/process/exec.rs:3:12
+  |
+3 |     arch::{Arch, ArchImpl},
+  |            ^^^^
+
+Some errors have detailed explanations: E0046, E0282, E0308, E0432, E0599, E0603.
+For more information about an error, try `rustc --explain E0046`.
+warning: `moss` (bin "moss") generated 14 warnings
+error: could not compile `moss` (bin "moss") due to 87 previous errors; 14 warnings emitted
