@@ -14,11 +14,11 @@ fn extract_bit_to_bool(extract_from: u8, index: u8) -> bool {
     bitmask = bitmask << index;
     let num = (extract_from & bitmask) >> index;
 
-    num as bool
+    num != 0
 }
 
-pub struct x86_64 {}
-impl Arch for x86_64 {
+pub struct X86_64 {}
+impl Arch for X86_64 {
     fn name() -> &'static str {
         "x86_64"
     }
