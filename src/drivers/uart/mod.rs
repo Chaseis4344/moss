@@ -51,7 +51,11 @@ use libkernel::{
 };
 
 //pub mod bcm2835_aux;
+
+#[cfg(target_arch = "aarch64")]
 pub mod imx_lp;
+
+#[cfg(target_arch = "aarch64")]
 pub mod pl011;
 
 /// A trait for low-level, hardware-specific UART drivers.
