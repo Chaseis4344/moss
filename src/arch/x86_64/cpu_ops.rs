@@ -21,7 +21,8 @@ impl CpuOps for super::X86_64 {
             //Should work in theory - valid on all x64 things
                 asm!("pushfd", //flags to stack
                     "pop eax", //stack to reg
-                    out("eax") flags); //Get mask out
+                    out("eax") flags
+                ); //Get mask out
         }
         //Unsure on intention of this function, if we want to only extract the Interrupt flag from
         //EFlags, we can, but if we want to extract all flags, that is easier. I'll be assuming we
