@@ -11,7 +11,12 @@ impl CpuOps for super::X86_64 {
     }
 
     fn id() -> usize {
-        unsafe { __cpuid(0x0B).edx as usize }
+        //SAFTEY: This implementation is for x86_64, this operation is universally supported in
+        //long mode 
+        //Additionally while 0x1F is a newer, superset leaf, it is less commonly supported (to my
+        //knowledge)
+        const V2APIC_ID_CHECK: u32 = 0x0B;
+        unsafe { __cpuid(V2APIC_ID_CHECK).edx as usize }
     }
 
     fn disable_interrupts() -> usize {
@@ -48,7 +53,7 @@ impl CpuOps for super::X86_64 {
             asm!(
                 "push eax",
                 "popfd",
-                in("eax") flags
+                in("eax") (flags as u32)
             )
         }
         x86_64::instructions::interrupts::enable(); 

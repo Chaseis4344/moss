@@ -29,7 +29,7 @@ arm-pl011-uart = { version = "0.4.0", default-features = false }
 acpi = "6.0.1"
 x86_64 = { version = "0.15.4", features = ["nightly", "instructions"]}
 
-[target.'cfg(target_arch="aarch64")'.features]
+[features]
 default = ["smp"]
 # Support for Symmetric Multiprocessing
 smp = []
