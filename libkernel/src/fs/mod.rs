@@ -106,6 +106,20 @@ pub enum FileType {
     Socket,
 }
 
+impl From<FileType> for u32 {
+    fn from(file_type: FileType) -> Self {
+        match file_type {
+            FileType::Directory => 0o040000,
+            FileType::CharDevice(_) => 0o020000,
+            FileType::BlockDevice(_) => 0o060000,
+            FileType::File => 0o100000,
+            FileType::Fifo => 0o010000,
+            FileType::Symlink => 0o120000,
+            FileType::Socket => 0o140000,
+        }
+    }
+}
+
 /// A stateful, streaming iterator for reading directory entries.
 #[async_trait]
 pub trait DirStream: Send + Sync {
@@ -227,6 +241,7 @@ pub trait Inode: Send + Sync + Any {
         Err(KernelError::NotSupported)
     }
 
+    /// Renames an inode originating from an old parent directory.
     async fn rename_from(
         &self,
         _old_parent: Arc<dyn Inode>,
@@ -237,6 +252,7 @@ pub trait Inode: Send + Sync + Any {
         Err(KernelError::NotSupported)
     }
 
+    /// Exchanges two inodes.
     async fn exchange(
         &self,
         _first_name: &str,
@@ -259,5 +275,21 @@ pub trait Inode: Send + Sync + Any {
     /// Reads the path of a symlink.
     async fn readlink(&self) -> Result<PathBuf> {
         Err(KernelError::NotSupported)
+    }
+
+    /// Flushes all modified data, including metadata, to the disk device containing the inode.
+    ///
+    /// The default implementation is a no-op so that read-only filesystems do
+    /// not need to override it.
+    async fn sync(&self) -> Result<()> {
+        self.datasync().await
+    }
+
+    /// Flushes modified data, excluding metadata, to the disk device containing the inode.
+    ///
+    /// The default implementation is a no-op so that read-only filesystems do
+    /// not need to override it.
+    async fn datasync(&self) -> Result<()> {
+        Ok(())
     }
 }

@@ -15,6 +15,7 @@ use crate::{
                 readlink::sys_readlinkat,
                 rename::{sys_renameat, sys_renameat2},
                 stat::sys_newfstatat,
+                statx::sys_statx,
                 symlink::sys_symlinkat,
                 unlink::sys_unlinkat,
                 utime::sys_utimensat,
@@ -29,7 +30,7 @@ use crate::{
             seek::sys_lseek,
             splice::sys_sendfile,
             stat::sys_fstat,
-            sync::sys_sync,
+            sync::{sys_fdatasync, sys_fsync, sys_sync, sys_syncfs},
             trunc::{sys_ftruncate, sys_truncate},
         },
     },
@@ -39,6 +40,7 @@ use crate::{
         mmap::{sys_mmap, sys_mprotect, sys_munmap},
     },
     process::{
+        caps::{sys_capget, sys_capset},
         clone::sys_clone,
         creds::{
             sys_getegid, sys_geteuid, sys_getgid, sys_getresgid, sys_getresuid, sys_gettid,
@@ -148,13 +150,13 @@ pub async fn handle_syscall() {
             sys_fchownat(
                 arg1.into(),
                 TUA::from_value(arg2 as _),
-                arg3.into(),
-                arg4.into(),
+                arg3 as _,
+                arg4 as _,
                 arg5 as _,
             )
             .await
         }
-        0x37 => sys_fchown(arg1.into(), arg2.into(), arg3.into()).await,
+        0x37 => sys_fchown(arg1.into(), arg2 as _, arg3 as _).await,
         0x38 => {
             sys_openat(
                 arg1.into(),
@@ -258,6 +260,8 @@ pub async fn handle_syscall() {
         }
         0x50 => sys_fstat(arg1.into(), TUA::from_value(arg2 as _)).await,
         0x51 => sys_sync().await,
+        0x52 => sys_fsync(arg1.into()).await,
+        0x53 => sys_fdatasync(arg1.into()).await,
         0x58 => {
             sys_utimensat(
                 arg1.into(),
@@ -267,6 +271,8 @@ pub async fn handle_syscall() {
             )
             .await
         }
+        0x5a => sys_capget(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
+        0x5b => sys_capset(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
         0x5d => sys_exit(arg1 as _).await,
         0x5e => sys_exit_group(arg1 as _),
         0x60 => sys_set_tid_address(TUA::from_value(arg1 as _)),
@@ -389,6 +395,7 @@ pub async fn handle_syscall() {
             )
             .await
         }
+        0x10b => sys_syncfs(arg1.into()).await,
         0x114 => {
             sys_renameat2(
                 arg1.into(),
@@ -417,6 +424,16 @@ pub async fn handle_syscall() {
                 arg3 as _,
                 arg4 as _,
                 arg5 as _,
+            )
+            .await
+        }
+        0x123 => {
+            sys_statx(
+                arg1.into(),
+                TUA::from_value(arg2 as _),
+                arg3 as _,
+                arg4 as _,
+                TUA::from_value(arg5 as _),
             )
             .await
         }

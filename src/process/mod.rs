@@ -1,5 +1,6 @@
 use crate::drivers::timer::Instant;
 use crate::process::threading::RobustListHead;
+use crate::sched::CpuId;
 use crate::{
     arch::{Arch, ArchImpl},
     fs::DummyInode,
@@ -28,6 +29,7 @@ use thread_group::{
     signal::{SigId, SigSet, SignalState},
 };
 
+pub mod caps;
 pub mod clone;
 pub mod creds;
 pub mod ctx;
@@ -164,6 +166,11 @@ impl Comm {
     }
 }
 
+/// Scheduler base weight to ensure tasks always have a strictly positive
+/// scheduling weight. The value is added to a task's priority to obtain its
+/// effective weight (`w_i` in EEVDF paper).
+pub const SCHED_WEIGHT_BASE: i32 = 1024;
+
 pub struct Task {
     pub tid: Tid,
     pub comm: Arc<SpinLock<Comm>>,
@@ -176,7 +183,11 @@ pub struct Task {
     pub ctx: SpinLock<Context>,
     pub sig_mask: SpinLock<SigSet>,
     pub pending_signals: SpinLock<SigSet>,
-    pub vruntime: SpinLock<u64>,
+    pub v_runtime: SpinLock<u128>,
+    /// Virtual time at which the task becomes eligible (v_ei).
+    pub v_eligible: SpinLock<u128>,
+    /// Virtual deadline (v_di) used by the EEVDF scheduler.
+    pub v_deadline: SpinLock<u128>,
     pub exec_start: SpinLock<Option<Instant>>,
     pub deadline: SpinLock<Option<Instant>>,
     pub priority: i8,
@@ -184,6 +195,7 @@ pub struct Task {
     pub state: Arc<SpinLock<TaskState>>,
     pub robust_list: SpinLock<Option<TUA<RobustListHead>>>,
     pub child_tid_ptr: SpinLock<Option<TUA<u32>>>,
+    pub last_cpu: SpinLock<CpuId>,
 }
 
 impl Task {
@@ -211,13 +223,16 @@ impl Task {
             vm: Arc::new(SpinLock::new(vm)),
             sig_mask: SpinLock::new(SigSet::empty()),
             pending_signals: SpinLock::new(SigSet::empty()),
-            vruntime: SpinLock::new(0),
+            v_runtime: SpinLock::new(0),
+            v_eligible: SpinLock::new(0),
+            v_deadline: SpinLock::new(0),
             exec_start: SpinLock::new(None),
             deadline: SpinLock::new(None),
             fd_table: Arc::new(SpinLock::new(FileDescriptorTable::new())),
             last_run: SpinLock::new(None),
             robust_list: SpinLock::new(None),
             child_tid_ptr: SpinLock::new(None),
+            last_cpu: SpinLock::new(CpuId::this()),
         }
     }
 
@@ -235,7 +250,9 @@ impl Task {
             )),
             fd_table: Arc::new(SpinLock::new(FileDescriptorTable::new())),
             pending_signals: SpinLock::new(SigSet::empty()),
-            vruntime: SpinLock::new(0),
+            v_runtime: SpinLock::new(0),
+            v_eligible: SpinLock::new(0),
+            v_deadline: SpinLock::new(0),
             exec_start: SpinLock::new(None),
             deadline: SpinLock::new(None),
             sig_mask: SpinLock::new(SigSet::empty()),
@@ -246,6 +263,7 @@ impl Task {
             last_run: SpinLock::new(None),
             robust_list: SpinLock::new(None),
             child_tid_ptr: SpinLock::new(None),
+            last_cpu: SpinLock::new(CpuId::this()),
         }
     }
 
@@ -255,6 +273,15 @@ impl Task {
 
     pub fn priority(&self) -> i8 {
         self.priority
+    }
+
+    /// Compute this task's scheduling weight.
+    ///
+    /// weight = priority + SCHED_WEIGHT_BASE
+    /// The sum is clamped to a minimum of 1
+    pub fn weight(&self) -> u32 {
+        let w = self.priority as i32 + SCHED_WEIGHT_BASE;
+        if w <= 0 { 1 } else { w as u32 }
     }
 
     pub fn set_priority(&mut self, priority: i8) {
@@ -280,7 +307,14 @@ impl Task {
     }
 }
 
-pub static TASK_LIST: SpinLock<BTreeMap<TaskDescriptor, Weak<SpinLock<TaskState>>>> =
+pub fn find_task_by_descriptor(descriptor: &TaskDescriptor) -> Option<Arc<Task>> {
+    TASK_LIST
+        .lock_save_irq()
+        .get(descriptor)
+        .and_then(|x| x.upgrade())
+}
+
+pub static TASK_LIST: SpinLock<BTreeMap<TaskDescriptor, Weak<Task>>> =
     SpinLock::new(BTreeMap::new());
 
 unsafe impl Send for Task {}
