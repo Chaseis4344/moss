@@ -170,6 +170,9 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                             // find another task to execute, removing this task
                             // from the runqueue, reaping it's resouces.
                             if task.state.lock_save_irq().is_finished() {
+                                // Ensure we don't take the fast-path sched exit
+                                // for a finished task.
+                                force_resched();
                                 state = State::PickNewTask;
                                 continue;
                             }

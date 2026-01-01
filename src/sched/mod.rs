@@ -114,7 +114,7 @@ pub fn insert_task_cross_cpu(task: Box<OwnedTask>) {
     if cpu == CpuId::this() {
         insert_task(task);
     } else {
-        message_cpu(cpu.value(), Message::PutTask(task)).expect("Failed to send task to CPU");
+        message_cpu(cpu, Message::PutTask(task)).expect("Failed to send task to CPU");
     }
 }
 
@@ -174,7 +174,7 @@ impl SchedState {
 
         if let Some(current) = self.run_q.current() {
             // We force a reschedule if:
-            // 
+            //
             // We are currently idling, OR The new task has an earlier deadline
             // than the current task.
             if current.is_idle_task() || new_task.v_deadline < current.v_deadline {
@@ -189,7 +189,11 @@ impl SchedState {
         if let Some(task) = self.wait_q.remove(&desc) {
             self.insert_into_runq(task);
         } else {
-            warn!("Spurious wakeup for task {:?}", desc);
+            warn!(
+                "Spurious wakeup for task {:?} on CPU {:?}",
+                desc,
+                CpuId::this().value()
+            );
         }
     }
 
@@ -206,8 +210,7 @@ impl SchedState {
             // scheduler core to see if a real task has arrived.
             if current.is_idle_task() {
                 needs_resched = true;
-            }
-            else if current.tick(now_inst) {
+            } else if current.tick(now_inst) {
                 // Otherwise, check if the real task expired
                 needs_resched = true;
             }
@@ -218,6 +221,12 @@ impl SchedState {
         if !needs_resched {
             // Fast Path: Only return if we have a valid task, it has budget,
             // AND it's not the idle task.
+            //
+            // Ensure that, in a debug build, we are only taking the fast-path
+            // on a *running* task.
+            if let Some(current) = self.run_q.current_mut() {
+                debug_assert_eq!(*current.state.lock_save_irq(), TaskState::Running);
+            }
             return;
         }
 

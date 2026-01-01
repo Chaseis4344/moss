@@ -56,7 +56,7 @@ impl TaskDescriptor {
     pub fn this_cpus_idle() -> Self {
         Self {
             tgid: Tgid(0),
-            tid: Tid(0),
+            tid: Tid(CpuId::this().value() as _),
         }
     }
 
