@@ -16,7 +16,7 @@ impl CpuOps for super::X86_64 {
         //Additionally while 0x1F is a newer, superset leaf, it is less commonly supported (to my
         //knowledge)
         const V2APIC_ID_CHECK: u32 = 0x0B;
-        unsafe { __cpuid(V2APIC_ID_CHECK).edx as usize }
+        __cpuid(V2APIC_ID_CHECK).edx as usize
     }
 
     fn disable_interrupts() -> usize {
