@@ -3,8 +3,8 @@ use super::{
     thread_group::{ProcessState, Tgid, ThreadGroup, signal::SigId, wait::ChildState},
     threading::futex::{self, key::FutexKey},
 };
-use crate::memory::uaccess::copy_to_user;
-use crate::sched::current_task;
+use crate::sched::current::current_task;
+use crate::{memory::uaccess::copy_to_user, sched::current::current_task_shared};
 use alloc::vec::Vec;
 use libkernel::error::Result;
 use log::warn;
@@ -80,7 +80,10 @@ pub fn do_exit_group(exit_code: ChildState) {
 
     parent.child_notifiers.child_update(process.tgid, exit_code);
 
-    parent.signals.lock_save_irq().set_pending(SigId::SIGCHLD);
+    parent
+        .pending_signals
+        .lock_save_irq()
+        .set_signal(SigId::SIGCHLD);
 
     // 5. This thread is now finished.
     *task.state.lock_save_irq() = TaskState::Finished;
@@ -102,20 +105,20 @@ pub fn sys_exit_group(exit_code: usize) -> Result<usize> {
 }
 
 pub async fn sys_exit(exit_code: usize) -> Result<usize> {
-    let task = current_task();
-
     // Honour CLONE_CHILD_CLEARTID: clear the user TID word and futex-wake any waiters.
-    let ptr = task.child_tid_ptr.lock_save_irq().take();
+    let ptr = current_task().child_tid_ptr.take();
+
     if let Some(ptr) = ptr {
         copy_to_user(ptr, 0u32).await?;
 
         if let Ok(key) = FutexKey::new_shared(ptr) {
-            futex::wake_key(1, key);
+            futex::wake_key(1, key, u32::MAX);
         } else {
             warn!("Failed to get futex wake key on sys_exit");
         }
     }
 
+    let task = current_task_shared();
     let process = Arc::clone(&task.process);
     let mut tasks_lock = process.tasks.lock_save_irq();
 

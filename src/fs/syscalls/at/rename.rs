@@ -8,10 +8,13 @@ use libkernel::{
 };
 
 use crate::{
-    fs::{VFS, syscalls::at::resolve_at_start_node},
+    fs::{
+        VFS,
+        syscalls::at::{AtFlags, resolve_at_start_node},
+    },
     memory::uaccess::cstr::UserCStr,
     process::fd_table::Fd,
-    sched::current_task,
+    sched::current::current_task_shared,
 };
 
 // from linux/fcntl.h
@@ -50,7 +53,8 @@ pub async fn sys_renameat2(
     let mut buf = [0; 1024];
     let mut buf2 = [0; 1024];
 
-    let task = current_task();
+    let task = current_task_shared();
+
     let old_path = Path::new(
         UserCStr::from_ptr(old_path)
             .copy_from_user(&mut buf)
@@ -64,18 +68,18 @@ pub async fn sys_renameat2(
     let old_name = old_path.file_name().ok_or(FsError::InvalidInput)?;
     let new_name = new_path.file_name().ok_or(FsError::InvalidInput)?;
 
-    let old_start_node = resolve_at_start_node(old_dirfd, old_path).await?;
-    let new_start_node = resolve_at_start_node(new_dirfd, new_path).await?;
+    let old_start_node = resolve_at_start_node(old_dirfd, old_path, AtFlags::empty()).await?;
+    let new_start_node = resolve_at_start_node(new_dirfd, new_path, AtFlags::empty()).await?;
 
     let old_parent_inode = if let Some(parent_path) = old_path.parent() {
-        VFS.resolve_path(parent_path, old_start_node.clone(), task.clone())
+        VFS.resolve_path(parent_path, old_start_node.clone(), &task)
             .await?
     } else {
         old_start_node.clone()
     };
 
     let new_parent_inode = if let Some(parent_path) = new_path.parent() {
-        VFS.resolve_path(parent_path, new_start_node.clone(), task.clone())
+        VFS.resolve_path(parent_path, new_start_node.clone(), &task)
             .await?
     } else {
         new_start_node.clone()
