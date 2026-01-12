@@ -3,7 +3,7 @@ use crate::{
     memory::uaccess::{UserCopyable, copy_to_user},
 };
 use alloc::ffi::CString;
-use core::{ffi::c_char, mem};
+use core::{ffi::c_char, mem::{self, transmute}};
 use libkernel::{error::Result, memory::address::TUA};
 
 #[repr(C)]
@@ -24,6 +24,9 @@ fn copy_str_to_c_char_arr(dest: &mut [c_char], src: &[u8]) {
     // This is safe because c_char is i8, which has the same size and alignment
     // as u8. We are just changing the "signedness" of the byte while copying.
     unsafe {
+        //Judging from above previous comment, this should be safe to do, since we are garunteeing
+        //things about the data
+        let src = transmute::<&[u8],&[i8]>(src);
         let dest_ptr = dest.as_mut_ptr();
         let dest_slice = core::slice::from_raw_parts_mut(dest_ptr, dest.len());
         dest_slice[..len].copy_from_slice(&src[..len]);

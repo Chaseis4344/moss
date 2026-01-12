@@ -16,6 +16,8 @@ use libkernel::{
 };
 use ringbuf::Arc;
 
+
+#[cfg(target_arch = "aarch64")]
 bitflags! {
     #[derive(Debug)]
     pub struct CloneFlags: u32 {
@@ -45,6 +47,34 @@ bitflags! {
     }
 }
 
+bitflags! {
+    #[derive(Debug)]
+    pub struct CloneFlags: u32 {
+        const CLONE_VM = 0x100;
+        const CLONE_FS = 0x200;
+        const CLONE_FILES = 0x400;
+        const CLONE_SIGHAND = 0x800;
+        const CLONE_PTRACE = 0x2000;
+        const CLONE_VFORK = 0x4000;
+        const CLONE_PARENT = 0x8000;
+        const CLONE_THREAD = 0x10000;
+        const CLONE_NEWNS = 0x20000;
+        const CLONE_SYSVSEM = 0x40000;
+        const CLONE_PARENT_SETTID = 0x100000;
+        const CLONE_CHILD_CLEARTID = 0x200000;
+        const CLONE_DETACHED = 0x400000;
+        const CLONE_UNTRACED = 0x800000;
+        const CLONE_CHILD_SETTID = 0x01000000;
+        const CLONE_NEWCGROUP = 0x02000000;
+        const CLONE_NEWUTS = 0x04000000;
+        const CLONE_NEWIPC = 0x08000000;
+        const CLONE_NEWUSER = 0x10000000;
+        const CLONE_NEWPID = 0x20000000;
+        const CLONE_NEWNET = 0x40000000;
+        const CLONE_IO = 0x80000000;
+    }
+}
+
 pub async fn sys_clone(
     flags: u32,
     newsp: UA,
@@ -58,10 +88,19 @@ pub async fn sys_clone(
         let current_task = current_task();
 
         let mut user_ctx = *current_task.ctx.user();
-
+        
+        //
         // TODO: Make this arch indepdenant. The child returns '0' on clone.
-        user_ctx.x[0] = 0;
+        // TRIAGE: I have used #[cfg()] here explicitly to turn off this feature, future
+        // implementations will be required to implement whatever is done here properly, and avoid
+        // arm-dependent code
+        //
+        #[cfg(target_arch = "aarch64")]
+        {
+            user_ctx.x[0] = 0;
+        }
 
+        #[cfg(target_arch = "aarch64")]
         if flags.contains(CloneFlags::CLONE_SETTLS) {
             // TODO: Make this arch indepdenant.
             user_ctx.tpid_el0 = tls as _;
@@ -73,8 +112,11 @@ pub async fn sys_clone(
                 // set.
                 return Err(KernelError::InvalidValue);
             }
-            user_ctx.sp_el0 = newsp.value() as _;
 
+            #[cfg(target_arch = "aarch64")]
+            {
+                user_ctx.sp_el0 = newsp.value() as _;
+            }
             (
                 // A new task whtin this thread group.
                 current_task.process.clone(),

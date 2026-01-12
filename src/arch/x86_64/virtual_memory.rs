@@ -32,8 +32,8 @@ unsafe impl GlobalAlloc for SpinlockHeap {
     }
 }
 
-struct X86ArchProccessAddressSpace {}
-struct X86ArchKernAddressSpace {}
+pub struct X86ArchProccessAddressSpace {}
+pub struct X86ArchKernAddressSpace {}
 
 impl VirtualMemory for X86_64 {
 

@@ -21,7 +21,7 @@ mod cpu_ops;
 mod virtual_memory;
 mod boot;
 
-#[derive(Clone)]
+#[derive(Clone,Copy)]
 pub struct UserContext{}
 pub struct X86_64 {}
 impl Arch for X86_64 {
@@ -57,16 +57,17 @@ impl Arch for X86_64 {
         sig: SigId,
         action: UserspaceSigAction,
     ) -> impl Future<Output = Result<<Self as Arch>::UserContext>>	{
-        todo!("Arch Impl");
+        async {todo!("Arch Impl");}
     }
 
     fn do_signal_return() -> impl Future<Output = Result<<Self as Arch>::UserContext>>	{
-        todo!("Arch Impl");
+        async {todo!("Arch Impl");}
     }
 
     unsafe fn copy_from_user(src: UA, dst: *mut (), len: usize)
     -> impl Future<Output = Result<()>>	{
-        todo!("Arch Impl");
+
+        async {todo!("Arch Impl");}
     }
 
     unsafe fn try_copy_from_user(src: UA, dst: *mut (), len: usize) -> Result<()>	{
@@ -75,7 +76,7 @@ impl Arch for X86_64 {
 
     unsafe fn copy_to_user(src: *const (), dst: UA, len: usize)
     -> impl Future<Output = Result<()>>	{
-        todo!("Arch Impl");
+        async {todo!("Arch Impl");}
     }
 
     unsafe fn copy_strn_from_user(
@@ -85,7 +86,7 @@ impl Arch for X86_64 {
     ) -> impl Future<Output = Result<usize>>	{
         //Can probably grab strn from libc and call it a day for x86
         //after building out the interaction with userspace
-        todo!("Arch Impl");
+        async {todo!("Arch Impl");}
     }
     fn cpu_count() -> usize {
         // This should return logical cores, if true cores are wanted we will need more complex logic
