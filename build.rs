@@ -3,7 +3,14 @@ use std::path::PathBuf;
 fn main() {
     let linker_script = match std::env::var("CARGO_CFG_TARGET_ARCH") {
         Ok(arch) if arch == "aarch64" => PathBuf::from("./src/arch/arm64/boot/linker.ld"),
-        Ok(arch) if arch == "x86_64" => PathBuf::from("./src/arch/x86_64/boot/linker.ld"),
+        Ok(arch) if arch == "x86_64" => {
+            println!("cargo::rustc-link-arg=--nmagic");
+            println!("cargo::rustc-link-arg=--no-gc-sections");
+            println!("cargo::rustc-link-arg=-z norelro");
+
+            println!("cargo::rustc-link-arg=--verbose");
+            PathBuf::from("./src/arch/x86_64/boot/linker.ld")
+        },
         Ok(arch) => {
             println!("Unsupported arch: {arch}");
             std::process::exit(1);

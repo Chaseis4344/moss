@@ -1,5 +1,5 @@
 ; Boot script needs to get us into long mode, assume GRUB2 enviroment
-section .multiboot_header
+.section .multiboot_header
 header_start:
     dd 0xe85250d6                ; magic number (multiboot 2)
     dd 0                         ; architecture 0 (protected mode i386)

@@ -24,8 +24,8 @@ impl CpuOps for super::X86_64 {
         //Should be safe to push something to stack, pop it from stack and store into variable
         unsafe {
             //Should work in theory - valid on all x64 things
-                asm!("pushfd", //flags to stack
-                    "pop eax", //stack to reg
+                asm!("pushf", //flags to stack
+                    "pop ax", //stack to reg
                     out("eax") flags
                 ); //Get mask out
         }
@@ -51,8 +51,8 @@ impl CpuOps for super::X86_64 {
         unsafe {
             //Assumes EAX gets filled before execution of instructions
             asm!(
-                "push eax",
-                "popfd",
+                "push ax",
+                "popf",
                 in("eax") (flags as u32)
             )
         }
