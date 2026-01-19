@@ -5,6 +5,7 @@ use super::{
     creds::Credentials,
     ctx::{Context, UserCtx},
     fd_table::FileDescriptorTable,
+    ptrace::PTrace,
     thread_group::{
         Tgid,
         builder::ThreadGroupBuilder,
@@ -75,6 +76,7 @@ impl OwnedTask {
             vm: Arc::new(SpinLock::new(vm)),
             fd_table: Arc::new(SpinLock::new(FileDescriptorTable::new())),
             last_cpu: SpinLock::new(CpuId::this()),
+            ptrace: SpinLock::new(PTrace::new()),
         };
 
         Self {
@@ -102,6 +104,7 @@ impl OwnedTask {
             )),
             fd_table: Arc::new(SpinLock::new(FileDescriptorTable::new())),
             last_cpu: SpinLock::new(CpuId::this()),
+            ptrace: SpinLock::new(PTrace::new()),
         };
 
         Self {
@@ -139,6 +142,17 @@ impl OwnedTask {
                 .pending_signals
                 .lock_save_irq()
                 .take_signal(self.sig_mask)
+        })
+    }
+
+    /// Check for a pending signal from this task's pending signal queue, or the
+    /// process's pending signal queue, while repsecting the signal mask.
+    pub fn peek_signal(&self) -> Option<SigId> {
+        self.pending_signals.peek_signal(self.sig_mask).or_else(|| {
+            self.process
+                .pending_signals
+                .lock_save_irq()
+                .peek_signal(self.sig_mask)
         })
     }
 }
