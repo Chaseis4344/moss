@@ -11,5 +11,4 @@ global_asm!(include_str!("test.s"));
 #[unsafe(no_mangle)]
 pub extern "C" fn arch_stage_3() {
     //Should, again work in theory
-    todo!("Establish alloc, larger stack, and call kmain")
 } 
