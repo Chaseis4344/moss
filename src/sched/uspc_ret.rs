@@ -1,4 +1,4 @@
-use super::{current::current_task, force_resched, schedule, waker::create_waker};
+use super::{current::current_task, schedule, waker::create_waker};
 use crate::{
     arch::{Arch, ArchImpl},
     process::{
@@ -128,7 +128,6 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                                 // task.
                                 // Task is currently running or is runnable and will now sleep.
                                 TaskState::Running | TaskState::Runnable => {
-                                    force_resched();
                                     *task_state = TaskState::Sleeping;
                                 }
                                 // If we were woken between the future returning
@@ -136,7 +135,13 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                                 // the waker will have put us into this state.
                                 // Transition back to `Running` since we're
                                 // ready to progress with more work.
-                                TaskState::Woken => *task_state = TaskState::Running,
+                                TaskState::Woken => {
+                                    *task_state = TaskState::Running;
+                                }
+                                // If the task finished concurrently while we were
+                                // polling its signal work, let the scheduler
+                                // pick another task; no further work to do here.
+                                TaskState::Finished => {}
                                 // We should never get here for any other state.
                                 s => {
                                     unreachable!(
@@ -170,17 +175,15 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                             // find another task to execute, removing this task
                             // from the runqueue, reaping it's resouces.
                             if task.state.lock_save_irq().is_finished() {
-                                // Ensure we don't take the fast-path sched exit
-                                // for a finished task.
-                                force_resched();
                                 state = State::PickNewTask;
                                 continue;
                             }
 
                             // Kernel work finished. Ensure we have no other new
-                            // work to process (i.e. a signal was rasied). We
-                            // don't need to clear the kernel context here as we
-                            // used the *take* function above.
+                            // work to process (i.e. a signal was rasied, trace
+                            // point was hit). We don't need to clear the kernel
+                            // context here as we used the *take* function
+                            // above.
                             state = State::ProcessKernelWork;
                             continue;
                         }
@@ -198,7 +201,6 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                             match *task_state {
                                 // Task is runnable or running, put it to sleep.
                                 TaskState::Running | TaskState::Runnable => {
-                                    force_resched();
                                     *task_state = TaskState::Sleeping
                                 }
                                 // If we were woken between the future returning
@@ -206,7 +208,13 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                                 // the waker will have put us into this state.
                                 // Transition back to `Running` since we're
                                 // ready to progress with more work.
-                                TaskState::Woken => *task_state = TaskState::Running,
+                                TaskState::Woken => {
+                                    *task_state = TaskState::Running;
+                                }
+                                // Task finished concurrently while we were trying
+                                // to put it to sleep; just reschedule and let
+                                // teardown handle it.
+                                TaskState::Finished => {}
                                 // We should never get here for any other state.
                                 s => {
                                     unreachable!(
@@ -232,6 +240,17 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                     let mut task = current_task();
 
                     while let Some(signal) = task.take_signal() {
+                        let mut ptrace = task.ptrace.lock_save_irq();
+                        if ptrace.trace_signal(signal, task.ctx.user()) {
+                            ptrace.notify_tracer_of_trap(&task.process);
+                            ptrace.set_waker(create_waker(task.descriptor()));
+
+                            *task.state.lock_save_irq() = TaskState::Stopped;
+                            state = State::PickNewTask;
+                            continue 'dispatch;
+                        }
+                        drop(ptrace);
+
                         let sigaction = task.process.signals.lock_save_irq().action_signal(signal);
 
                         match sigaction {
@@ -239,6 +258,7 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                             None => continue,
                             Some(KSignalAction::Term | KSignalAction::Core) => {
                                 // Terminate the process, and find a new task.
+                                drop(task);
                                 kernel_exit_with_signal(signal, false);
 
                                 state = State::PickNewTask;
@@ -259,10 +279,7 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                                         .child_notifiers
                                         .child_update(process.tgid, ChildState::Stop { signal });
 
-                                    parent
-                                        .pending_signals
-                                        .lock_save_irq()
-                                        .set_signal(SigId::SIGCHLD);
+                                    parent.deliver_signal(SigId::SIGCHLD);
                                 }
 
                                 for thr_weak in process.tasks.lock_save_irq().values() {
@@ -297,10 +314,8 @@ pub fn dispatch_userspace_task(ctx: *mut UserCtx) {
                                     parent
                                         .child_notifiers
                                         .child_update(process.tgid, ChildState::Continue);
-                                    parent
-                                        .pending_signals
-                                        .lock_save_irq()
-                                        .set_signal(SigId::SIGCHLD);
+
+                                    parent.deliver_signal(SigId::SIGCHLD);
                                 }
 
                                 // Re-process kernel work for this task (there may be more to do).

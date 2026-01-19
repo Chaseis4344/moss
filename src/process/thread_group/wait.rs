@@ -1,3 +1,7 @@
+use super::{
+    Pgid, Tgid, ThreadGroup,
+    signal::{InterruptResult, Interruptable, SigId},
+};
 use crate::clock::timespec::TimeSpec;
 use crate::memory::uaccess::copy_to_user;
 use crate::sched::current::current_task_shared;
@@ -9,9 +13,6 @@ use libkernel::{
     error::{KernelError, Result},
     memory::address::TUA,
 };
-
-use super::Tgid;
-use super::signal::SigId;
 
 pub type PidT = i32;
 
@@ -54,6 +55,7 @@ pub enum ChildState {
     NormalExit { code: u32 },
     SignalExit { signal: SigId, core: bool },
     Stop { signal: SigId },
+    TraceTrap { signal: SigId, mask: i32 },
     Continue,
 }
 
@@ -64,6 +66,8 @@ impl ChildState {
                 flags.contains(WaitFlags::WEXITED)
             }
             ChildState::Stop { .. } => flags.contains(WaitFlags::WSTOPPED),
+            // Always wake up on a trace trap.
+            ChildState::TraceTrap { .. } => true,
             ChildState::Continue => flags.contains(WaitFlags::WCONTINUED),
         }
     }
@@ -110,6 +114,23 @@ fn do_wait(
                 None
             }
         })
+    } else if pid < -1 {
+        // Wait for any child whose process group ID matches abs(pid)
+        let target_pgid = Pgid((-pid) as u32);
+        state.iter().find_map(|(k, v)| {
+            if !v.matches_wait_flags(flags) {
+                return None;
+            }
+            if let Some(tg) = ThreadGroup::get(*k) {
+                if *tg.pgid.lock_save_irq() == target_pgid {
+                    Some(*k)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
     } else {
         state
             .get_key_value(&Tgid::from_pid_t(pid))
@@ -131,11 +152,6 @@ pub async fn sys_wait4(
     flags: u32,
     rusage: TUA<RUsage>,
 ) -> Result<usize> {
-    if pid < -1 {
-        // TODO: Funky waiting.
-        return Err(KernelError::NotSupported);
-    }
-
     let mut flags = WaitFlags::from_bits_retain(flags);
 
     if flags.contains_unknown_bits() {
@@ -167,7 +183,12 @@ pub async fn sys_wait4(
 
     let task = current_task_shared();
 
-    let (tgid, child_state) = if flags.contains(WaitFlags::WNOHANG) {
+    let child_proc_count = task.process.children.lock_save_irq().iter().count();
+
+    let (tgid, child_state) = if child_proc_count == 0 || flags.contains(WaitFlags::WNOHANG) {
+        // Special case for no children. See if there are any pending child
+        // notification events without sleeping. If there are no children and no
+        // pending events, return ECHILD.
         let mut ret = None;
         task.process.child_notifiers.inner.update(|s| {
             ret = do_wait(s, pid, flags);
@@ -175,15 +196,22 @@ pub async fn sys_wait4(
         });
 
         match ret {
-            None => return Ok(0),
             Some(ret) => ret,
+            None if child_proc_count == 0 => return Err(KernelError::NoChildProcess),
+            None => return Ok(0),
         }
     } else {
-        task.process
+        match task
+            .process
             .child_notifiers
             .inner
             .wait_until(|state| do_wait(state, pid, flags))
+            .interruptable()
             .await
+        {
+            InterruptResult::Interrupted => return Err(KernelError::Interrupted),
+            InterruptResult::Uninterrupted(r) => r,
+        }
     };
 
     if !stat_addr.is_null() {
@@ -199,7 +227,14 @@ pub async fn sys_wait4(
                 .await?;
             }
             ChildState::Stop { signal } => {
-                copy_to_user(stat_addr, ((signal as i32) << 8) | 0x7f).await?;
+                copy_to_user(stat_addr, ((signal.user_id() as i32) << 8) | 0x7f).await?;
+            }
+            ChildState::TraceTrap { signal, mask } => {
+                copy_to_user(
+                    stat_addr,
+                    ((signal.user_id() as i32) << 8) | 0x7f | mask << 8,
+                )
+                .await?;
             }
             ChildState::Continue => {
                 copy_to_user(stat_addr, 0xffff).await?;
