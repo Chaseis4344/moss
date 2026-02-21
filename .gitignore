@@ -5,5 +5,5 @@
 *.img
 .idea/
 .vscode/
-
 ext4_mount/
+rust-project.json
