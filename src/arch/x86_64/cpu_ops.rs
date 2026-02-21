@@ -1,64 +1,56 @@
 use libkernel::CpuOps;
 use core::arch::asm;
+use core::arch::x86_64::__cpuid;
+use core::arch::x86_64::CpuidResult;
 
-impl CpuOps for super::x86_64 {
+impl CpuOps for super::X86_64 {
     fn halt() -> ! {
         loop {
-            unsafe { asm!("hlt") }
+            x86_64::instructions::hlt()
         }
     }
 
     fn id() -> usize {
-        //set to zero and pretend there is only 1 until x86 instructions are figured out
-        let id: usize = 0;
-        id
+        unsafe { __cpuid(0x0B).edx as usize }
     }
 
     fn disable_interrupts() -> usize {
-        let mut interrupt_mask: usize;
+        let mut flags: u32;
+        //Should be safe to push something to stack, pop it from stack and store into variable
         unsafe {
-            // This isn't perfect but should work in theory
-            // We will get a CPU exception if this instruction isn't supported for a CPU
-            let mut cpu_id_result: usize = 0;
-
-            asm!(
-                "mov eax, 0x80000001",
-                "cpuid",
-                out("ecx") cpu_id_result
-            );
-            if cpu_id_result == 1 {
-                asm!("lahf", out("ah") interrupt_mask); //Get mask out
-                asm!("cli"); //Disable maskable interupts
-            } else {
-                panic!("CPU does not support LAHF and SAHF")
-            }
+            //Should work in theory - valid on all x64 things
+                asm!("pushfd", //flags to stack
+                    "pop eax", //stack to reg
+                    out("eax") flags); //Get mask out
         }
-
-        interrupt_mask //return mask
+        //Unsure on intention of this function, if we want to only extract the Interrupt flag from
+        //EFlags, we can, but if we want to extract all flags, that is easier. I'll be assuming we
+        //want the complete EFlags register for now and this can be changed later if that is not
+        //the case
+        //let if_bit = (flags & (1<<8));
+        x86_64::instructions::interrupts::disable(); //Disable maskable interupts
+        
+        //Zero-extend if we can
+        flags as usize
     }
 
+
     fn enable_interrupts() {
-        unsafe {
-            asm!("sti"); //Set interrupt flag
-        }
+        //Set interrupt flag - does asm!("sti"); under the hood
+        x86_64::instructions::interrupts::enable(); 
     }
 
     fn restore_interrupt_state(flags: usize) {
+        
         unsafe {
-            let mut cpu_id_result: usize = 0;
-
+            //Assumes EAX gets filled before execution of instructions
             asm!(
-                "mov eax, 0x80000001",
-                "cpuid",
-                out("ecx") cpu_id_result
-            );
-            if cpu_id_result == 1 {
-                //Hoping that the asm macro loads registers before execution
-                asm!("sahf", in("ah") flags);
-                asm!("sti");
-            } else {
-                panic!("CPU does not support LAHF and SAHF");
-            }
+                "push eax",
+                "popfd",
+                in("eax") flags
+            )
         }
+        x86_64::instructions::interrupts::enable(); 
+        
     }
 }
