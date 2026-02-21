@@ -1,4 +1,6 @@
+use colored::Colorize;
 use std::{
+    io::{Write, stdout},
     sync::{Arc, Barrier, Mutex},
     thread,
 };
@@ -19,8 +21,8 @@ macro_rules! register_test {
     ($name:ident) => {
         // Add to inventory
         inventory::submit! {
-            crate::Test {
-                test_text: stringify!($name),
+            $crate::Test {
+                test_text: concat!(module_path!(), "::", stringify!($name)),
                 test_fn: $name,
             }
         }
@@ -28,7 +30,7 @@ macro_rules! register_test {
     ($name:ident, $text:expr) => {
         // Add to inventory
         inventory::submit! {
-            crate::Test {
+            $crate::Test {
                 test_text: $text,
                 test_fn: $name,
             }
@@ -42,7 +44,7 @@ fn test_sync() {
     }
 }
 
-register_test!(test_sync, "Testing sync syscall");
+register_test!(test_sync);
 
 fn test_clock_sleep() {
     use std::thread::sleep;
@@ -55,7 +57,7 @@ fn test_clock_sleep() {
     assert!(now.elapsed() >= SLEEP_LEN);
 }
 
-register_test!(test_clock_sleep, "Testing clock sleep");
+register_test!(test_clock_sleep);
 
 fn test_fork() {
     unsafe {
@@ -73,7 +75,7 @@ fn test_fork() {
     }
 }
 
-register_test!(test_fork, "Testing fork syscall");
+register_test!(test_fork);
 
 fn test_rust_thread() {
     let handle = thread::spawn(|| 24);
@@ -81,7 +83,7 @@ fn test_rust_thread() {
     assert_eq!(handle.join().unwrap(), 24);
 }
 
-register_test!(test_rust_thread, "Testing rust threads");
+register_test!(test_rust_thread);
 
 fn test_rust_mutex() {
     const THREADS: usize = 32;
@@ -115,7 +117,7 @@ fn test_rust_mutex() {
     assert_eq!(final_val, THREADS * ITERS);
 }
 
-register_test!(test_rust_mutex, "Testing rust mutex");
+register_test!(test_rust_mutex);
 
 fn test_parking_lot_mutex_timeout() {
     use parking_lot::Mutex;
@@ -133,10 +135,7 @@ fn test_parking_lot_mutex_timeout() {
     drop(guard);
 }
 
-register_test!(
-    test_parking_lot_mutex_timeout,
-    "Testing parking_lot mutex with timeout"
-);
+register_test!(test_parking_lot_mutex_timeout);
 
 fn test_thread_with_name() {
     let handle = thread::Builder::new()
@@ -149,9 +148,53 @@ fn test_thread_with_name() {
     handle.join().unwrap();
 }
 
-register_test!(test_thread_with_name, "Testing thread with name");
+register_test!(test_thread_with_name);
 
-fn run_test(test_fn: fn()) {
+fn test_mincore() {
+    use std::ptr;
+
+    unsafe {
+        let page_size = libc::sysconf(libc::_SC_PAGESIZE) as usize;
+        assert!(page_size > 0);
+
+        // Map exactly one page, read-write, anonymous private
+        let addr = libc::mmap(
+            ptr::null_mut(),
+            page_size,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,
+            0,
+        );
+        if addr == libc::MAP_FAILED {
+            panic!("mmap failed: {}", std::io::Error::last_os_error());
+        }
+
+        // Touch the page to fault it in
+        ptr::write(addr as *mut u8, 42);
+
+        let mut vec_byte: u8 = 0;
+        let ret = libc::mincore(addr as *mut _, page_size, &mut vec_byte as *mut u8);
+        if ret != 0 {
+            let err = std::io::Error::last_os_error();
+            panic!("mincore failed: {}", err);
+        }
+        // LSB set indicates resident
+        assert!(
+            vec_byte & 0x1 == 0x1,
+            "Expected page to be resident, vec={:02x}",
+            vec_byte
+        );
+
+        // Cleanup
+        let rc = libc::munmap(addr, page_size);
+        assert_eq!(rc, 0, "munmap failed: {}", std::io::Error::last_os_error());
+    }
+}
+
+register_test!(test_mincore);
+
+fn run_test(test_fn: fn()) -> Result<(), i32> {
     // Fork a new process to run the test
     unsafe {
         let pid = libc::fork();
@@ -159,17 +202,27 @@ fn run_test(test_fn: fn()) {
             panic!("fork failed");
         } else if pid == 0 {
             // Child process
-            test_fn();
-            libc::_exit(0);
+            let result = std::panic::catch_unwind(|| {
+                test_fn();
+            });
+            let exit_code = if let Err(e) = result {
+                // Get the panic info
+                eprintln!("Test panicked: {:?}", e);
+                let error = std::io::Error::last_os_error();
+                eprintln!("Last OS error: {}", error);
+                1
+            } else {
+                0
+            };
+            libc::_exit(exit_code);
         } else {
             // Parent process
             let mut status = 0;
             libc::waitpid(pid, &mut status, 0);
             if !libc::WIFEXITED(status) || libc::WEXITSTATUS(status) != 0 {
-                panic!(
-                    "Test failed in child process: {}",
-                    std::io::Error::last_os_error()
-                );
+                Err(status)
+            } else {
+                Ok(())
             }
         }
     }
@@ -178,11 +231,26 @@ fn run_test(test_fn: fn()) {
 fn main() {
     println!("Running userspace tests ...");
     let start = std::time::Instant::now();
+    let mut failures = 0;
     for test in inventory::iter::<Test> {
         print!("{} ...", test.test_text);
-        run_test(test.test_fn);
-        println!(" OK");
+        let _ = stdout().flush();
+        match run_test(test.test_fn) {
+            Ok(()) => println!("{}", " OK".green()),
+            Err(code) => {
+                println!(" {}", "FAILED".red());
+                eprintln!("Test '{}' failed with exit code {}", test.test_text, code);
+                failures += 1;
+            }
+        }
     }
     let end = std::time::Instant::now();
+    if failures > 0 {
+        eprintln!(
+            "{failures} tests failed in {} ms",
+            (end - start).as_millis()
+        );
+        std::process::exit(1);
+    }
     println!("All tests passed in {} ms", (end - start).as_millis());
 }

@@ -2,6 +2,7 @@ use crate::{
     arch::{Arch, ArchImpl},
     clock::{
         gettime::sys_clock_gettime,
+        settime::sys_clock_settime,
         timeofday::{sys_gettimeofday, sys_settimeofday},
     },
     fs::{
@@ -28,6 +29,7 @@ use crate::{
             chmod::sys_fchmod,
             chown::sys_fchown,
             close::{sys_close, sys_close_range},
+            copy_file_range::sys_copy_file_range,
             getxattr::{sys_fgetxattr, sys_getxattr, sys_lgetxattr},
             ioctl::sys_ioctl,
             iov::{sys_preadv, sys_preadv2, sys_pwritev, sys_pwritev2, sys_readv, sys_writev},
@@ -38,13 +40,18 @@ use crate::{
             setxattr::{sys_fsetxattr, sys_lsetxattr, sys_setxattr},
             splice::sys_sendfile,
             stat::sys_fstat,
+            statfs::{sys_fstatfs, sys_statfs},
             sync::{sys_fdatasync, sys_fsync, sys_sync, sys_syncfs},
             trunc::{sys_ftruncate, sys_truncate},
         },
     },
-    kernel::{power::sys_reboot, rand::sys_getrandom, sysinfo::sys_sysinfo, uname::sys_uname},
+    kernel::{
+        hostname::sys_sethostname, power::sys_reboot, rand::sys_getrandom, sysinfo::sys_sysinfo,
+        uname::sys_uname,
+    },
     memory::{
         brk::sys_brk,
+        mincore::sys_mincore,
         mmap::{sys_mmap, sys_mprotect, sys_munmap},
         process_vm::sys_process_vm_readv,
     },
@@ -53,8 +60,8 @@ use crate::{
         caps::{sys_capget, sys_capset},
         clone::sys_clone,
         creds::{
-            sys_getegid, sys_geteuid, sys_getgid, sys_getresgid, sys_getresuid, sys_gettid,
-            sys_getuid, sys_setfsgid, sys_setfsuid,
+            sys_getegid, sys_geteuid, sys_getgid, sys_getresgid, sys_getresuid, sys_getsid,
+            sys_gettid, sys_getuid, sys_setfsgid, sys_setfsuid, sys_setsid,
         },
         exec::sys_execve,
         exit::{sys_exit, sys_exit_group},
@@ -77,7 +84,7 @@ use crate::{
                 sigprocmask::sys_rt_sigprocmask,
             },
             umask::sys_umask,
-            wait::sys_wait4,
+            wait::{sys_wait4, sys_waitid},
         },
         threading::{futex::sys_futex, sys_set_robust_list, sys_set_tid_address},
     },
@@ -90,6 +97,8 @@ use libkernel::{
 };
 
 pub async fn handle_syscall() {
+    current_task().update_accounting(None);
+    current_task().in_syscall = true;
     ptrace_stop(TracePoint::SyscallEntry).await;
 
     let (nr, arg1, arg2, arg3, arg4, arg5, arg6) = {
@@ -221,7 +230,8 @@ pub async fn handle_syscall() {
             )
             .await
         }
-        0x2b | 0x2c => Err(KernelError::NotSupported),
+        0x2b => sys_statfs(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
+        0x2c => sys_fstatfs(arg1.into(), TUA::from_value(arg2 as _)).await,
         0x2d => sys_truncate(TUA::from_value(arg1 as _), arg2 as _).await,
         0x2e => sys_ftruncate(arg1.into(), arg2 as _).await,
         0x30 => sys_faccessat(arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await,
@@ -387,6 +397,16 @@ pub async fn handle_syscall() {
             // Don't process result on exit.
             return;
         }
+        0x5f => {
+            sys_waitid(
+                arg1 as _,
+                arg2 as _,
+                TUA::from_value(arg3 as _),
+                arg4 as _,
+                TUA::from_value(arg5 as _),
+            )
+            .await
+        }
         0x60 => sys_set_tid_address(TUA::from_value(arg1 as _)),
         0x62 => {
             sys_futex(
@@ -401,12 +421,14 @@ pub async fn handle_syscall() {
         }
         0x63 => sys_set_robust_list(TUA::from_value(arg1 as _), arg2 as _).await,
         0x65 => sys_nanosleep(TUA::from_value(arg1 as _), TUA::from_value(arg2 as _)).await,
+        0x70 => sys_clock_settime(arg1 as _, TUA::from_value(arg2 as _)).await,
         0x71 => sys_clock_gettime(arg1 as _, TUA::from_value(arg2 as _)).await,
         0x73 => {
             sys_clock_nanosleep(
                 arg1 as _,
-                TUA::from_value(arg2 as _),
+                arg2 as _,
                 TUA::from_value(arg3 as _),
+                TUA::from_value(arg4 as _),
             )
             .await
         }
@@ -471,7 +493,10 @@ pub async fn handle_syscall() {
         0x98 => sys_setfsgid(arg1 as _).map_err(|e| match e {}),
         0x9a => sys_setpgid(arg1 as _, Pgid(arg2 as _)),
         0x9b => sys_getpgid(arg1 as _),
+        0x9c => sys_getsid().await,
+        0x9d => sys_setsid().await,
         0xa0 => sys_uname(TUA::from_value(arg1 as _)).await,
+        0xa1 => sys_sethostname(TUA::from_value(arg1 as _), arg2 as _).await,
         0xa3 => Err(KernelError::InvalidValue),
         0xa6 => sys_umask(arg1 as _).map_err(|e| match e {}),
         0xa7 => sys_prctl(arg1 as _, arg2, arg3).await,
@@ -511,6 +536,7 @@ pub async fn handle_syscall() {
         0xde => sys_mmap(arg1, arg2, arg3, arg4, arg5.into(), arg6).await,
         0xdf => Ok(0), // fadvise64_64 is a no-op
         0xe2 => sys_mprotect(VA::from_value(arg1 as _), arg2 as _, arg3 as _),
+        0xe8 => sys_mincore(arg1, arg2 as _, TUA::from_value(arg3 as _)).await,
         0xe9 => Ok(0), // sys_madvise is a no-op
         0x104 => {
             sys_wait4(
@@ -555,6 +581,17 @@ pub async fn handle_syscall() {
             .await
         }
         0x116 => sys_getrandom(TUA::from_value(arg1 as _), arg2 as _, arg3 as _).await,
+        0x11d => {
+            sys_copy_file_range(
+                arg1.into(),
+                TUA::from_value(arg2 as _),
+                arg3.into(),
+                TUA::from_value(arg4 as _),
+                arg5 as _,
+                arg6 as _,
+            )
+            .await
+        }
         0x11e => {
             sys_preadv2(
                 arg1.into(),
@@ -610,4 +647,6 @@ pub async fn handle_syscall() {
 
     current_task().ctx.user_mut().x[0] = ret_val.cast_unsigned() as u64;
     ptrace_stop(TracePoint::SyscallExit).await;
+    current_task().update_accounting(None);
+    current_task().in_syscall = false;
 }

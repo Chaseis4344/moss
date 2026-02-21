@@ -7,7 +7,7 @@ global_asm!(include_str!("start.s"));
 global_asm!(include_str!("secondary.s"));
 
 #[unsafe(no_mangle)]
-pub extern "C" fn arch_stage_2() {
+pub extern "C" fn arch_stage_3() {
     //Should, again work in theory
     //
      // ATTENTION: we have a very small stack and no guard page
@@ -20,4 +20,5 @@ pub extern "C" fn arch_stage_2() {
 
     };
     loop {}
-} 
+
+}

@@ -5,7 +5,7 @@ use alloc::{
     sync::{Arc, Weak},
 };
 use builder::ThreadGroupBuilder;
-use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicUsize;
 use core::{
     fmt::Display,
     sync::atomic::{AtomicU32, Ordering},
@@ -101,22 +101,23 @@ pub struct ThreadGroup {
     pub pending_signals: SpinLock<SigSet>,
     pub priority: SpinLock<i8>,
     pub child_notifiers: ChildNotifiers,
-    pub utime: AtomicU64,
-    pub stime: AtomicU64,
+    pub utime: AtomicUsize,
+    pub stime: AtomicUsize,
+    pub last_account: AtomicUsize,
     next_tid: AtomicU32,
 }
 
 unsafe impl Send for ThreadGroup {}
 
 impl ThreadGroup {
-    // Return the next avilable thread id. Will never return a thread who's ID
+    // Return the next available thread id. Will never return a thread whose ID
     // == TGID, since that is defined as the main, root thread.
     pub fn next_tid(&self) -> Tid {
         let mut v = self.next_tid.fetch_add(1, Ordering::Relaxed);
 
         // Skip the TGID.
         if v == self.tgid.value() {
-            v = self.next_tid.fetch_add(1, Ordering::Relaxed)
+            v = self.next_tid.fetch_add(1, Ordering::Relaxed);
         }
 
         Tid(v)

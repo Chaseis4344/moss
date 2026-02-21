@@ -63,7 +63,7 @@ impl From<ext4_view::Ext4Error> for KernelError {
             ext4_view::Ext4Error::NotADirectory => KernelError::Fs(FsError::NotADirectory),
             ext4_view::Ext4Error::Corrupt(_) => KernelError::Fs(FsError::InvalidFs),
             e => {
-                error!("Unmapped EXT4 error: {:?}", e);
+                error!("Unmapped EXT4 error: {e:?}");
                 KernelError::Other("EXT4 error")
             }
         }
@@ -96,6 +96,7 @@ impl From<Metadata> for FileAttr {
             atime: meta.atime,
             ctime: meta.ctime,
             mtime: meta.mtime,
+            nlinks: meta.links_count as u32,
             ..Default::default()
         }
     }
@@ -156,11 +157,11 @@ where
     async fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
         let inner = self.inner.lock().await;
         // Must be a regular file.
-        if inner.metadata.file_type != ext4_view::FileType::Regular {
+        if inner.file_type() != ext4_view::FileType::Regular {
             return Err(KernelError::NotSupported);
         }
 
-        let file_size = inner.metadata.size_in_bytes;
+        let file_size = inner.size_in_bytes();
 
         // Past EOF = nothing to read.
         if offset >= file_size {
@@ -193,7 +194,7 @@ where
     async fn write_at(&self, offset: u64, buf: &[u8]) -> Result<usize> {
         let mut inner = self.inner.lock().await;
         // Must be a regular file.
-        if inner.metadata.file_type != ext4_view::FileType::Regular {
+        if inner.file_type() != ext4_view::FileType::Regular {
             return Err(KernelError::NotSupported);
         }
 
@@ -222,7 +223,7 @@ where
 
     async fn truncate(&self, size: u64) -> Result<()> {
         let inner = self.inner.lock().await;
-        if inner.metadata.file_type != ext4_view::FileType::Regular {
+        if inner.file_type() != ext4_view::FileType::Regular {
             return Err(KernelError::NotSupported);
         }
         let fs = self.fs_ref.upgrade().unwrap();
@@ -233,7 +234,7 @@ where
 
     async fn getattr(&self) -> Result<FileAttr> {
         let inner = self.inner.lock().await;
-        let mut attrs: FileAttr = inner.metadata.clone().into();
+        let mut attrs: FileAttr = inner.metadata().into();
         let fs = self.fs_ref.upgrade().ok_or(FsError::InvalidFs)?;
 
         attrs.id = InodeId::from_fsid_and_inodeid(fs.id(), self.id.get() as u64);
@@ -243,11 +244,12 @@ where
 
     async fn setattr(&self, attr: FileAttr) -> Result<()> {
         let mut inner = self.inner.lock().await;
-        inner.metadata.atime = attr.atime;
-        inner.metadata.ctime = attr.ctime;
-        inner.metadata.mtime = attr.mtime;
-        inner.metadata.gid = attr.gid.into();
-        inner.metadata.uid = attr.uid.into();
+        inner.set_atime(attr.atime);
+        inner.set_ctime(attr.ctime);
+        inner.set_mtime(attr.mtime);
+        inner.set_gid(attr.gid.into());
+        inner.set_uid(attr.uid.into());
+        inner.set_links_count(attr.nlinks as u16);
         let fs = self.fs_ref.upgrade().ok_or(FsError::InvalidFs)?;
         inner.write(&fs.inner).await?;
         Ok(())
@@ -287,7 +289,7 @@ where
 
     async fn readdir(&self, start_offset: u64) -> Result<Box<dyn DirStream>> {
         let inner = self.inner.lock().await;
-        if inner.metadata.file_type != ext4_view::FileType::Directory {
+        if inner.file_type() != ext4_view::FileType::Directory {
             return Err(KernelError::NotSupported);
         }
         let fs = self.fs_ref.upgrade().unwrap();
@@ -300,7 +302,7 @@ where
 
     async fn readlink(&self) -> Result<PathBuf> {
         let inner = self.inner.lock().await;
-        if inner.metadata.file_type != ext4_view::FileType::Symlink {
+        if inner.file_type() != ext4_view::FileType::Symlink {
             return Err(KernelError::NotSupported);
         }
         let fs = self.fs_ref.upgrade().unwrap();
@@ -358,6 +360,11 @@ where
 {
     fn id(&self) -> u64 {
         self.id
+    }
+
+    fn magic(&self) -> u64 {
+        // TODO: retrieve magic from superblock instead of hardcoding
+        0xef53 // EXT4 magic number
     }
 
     /// Returns the root inode of the mounted EXT4 filesystem.

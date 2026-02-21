@@ -56,11 +56,15 @@ impl DevFs {
             return Err(KernelError::InUse);
         }
 
-        let id = self.next_inode_id.fetch_add(1, Ordering::SeqCst);
+        let id = InodeId::from_fsid_and_inodeid(
+            DEVFS_ID,
+            self.next_inode_id.fetch_add(1, Ordering::SeqCst),
+        );
 
         let new_inode = Arc::new(DevFsINode {
-            id: InodeId::from_fsid_and_inodeid(DEVFS_ID, id),
+            id,
             attr: SpinLock::new(FileAttr {
+                id,
                 file_type: FileType::CharDevice(device_id),
                 mode,
                 ..FileAttr::default()
@@ -83,6 +87,11 @@ impl Filesystem for DevFs {
 
     fn id(&self) -> u64 {
         DEVFS_ID
+    }
+
+    fn magic(&self) -> u64 {
+        // TODO: Is this the right value
+        0x01021994 // TMPFS_MAGIC
     }
 }
 
@@ -145,7 +154,7 @@ impl Inode for DevFsINode {
     async fn getattr(&self) -> Result<FileAttr> {
         let mut attr = self.attr.lock_save_irq().clone();
         if let InodeKind::CharDevice { device_id } = self.kind {
-            attr.file_type = FileType::CharDevice(device_id)
+            attr.file_type = FileType::CharDevice(device_id);
         }
         Ok(attr)
     }

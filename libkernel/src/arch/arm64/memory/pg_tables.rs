@@ -59,6 +59,9 @@ pub trait PgTable: Clone + Copy {
     /// Get the descriptor for a given virtual address.
     fn get_desc(self, va: VA) -> Self::Descriptor;
 
+    /// Get the descriptor for a given index.
+    fn get_idx(self, idx: usize) -> Self::Descriptor;
+
     /// Set the value of the descriptor for a particular VA.
     fn set_desc(self, va: VA, desc: Self::Descriptor, invalidator: &dyn TLBInvalidator);
 }
@@ -121,9 +124,14 @@ macro_rules! impl_pgtable {
                 self.base
             }
 
-            fn get_desc(self, va: VA) -> Self::Descriptor {
-                let raw = unsafe { self.base.add(Self::pg_index(va)).read_volatile() };
+            fn get_idx(self, idx: usize) -> Self::Descriptor {
+                debug_assert!(idx < DESCRIPTORS_PER_PAGE);
+                let raw = unsafe { self.base.add(idx).read_volatile() };
                 Self::Descriptor::from_raw(raw)
+            }
+
+            fn get_desc(self, va: VA) -> Self::Descriptor {
+                self.get_idx(Self::pg_index(va))
             }
 
             fn set_desc(self, va: VA, desc: Self::Descriptor, _invalidator: &dyn TLBInvalidator) {
@@ -315,19 +323,19 @@ where
     PM: PageTableMapper,
 {
     if attrs.phys.size() != attrs.virt.size() {
-        Err(MapError::SizeMismatch)?
+        Err(MapError::SizeMismatch)?;
     }
 
     if attrs.phys.size() < PAGE_SIZE {
-        Err(MapError::TooSmall)?
+        Err(MapError::TooSmall)?;
     }
 
     if !attrs.phys.is_page_aligned() {
-        Err(MapError::PhysNotAligned)?
+        Err(MapError::PhysNotAligned)?;
     }
 
     if !attrs.virt.is_page_aligned() {
-        Err(MapError::VirtNotAligned)?
+        Err(MapError::VirtNotAligned)?;
     }
 
     while attrs.virt.size() > 0 {
@@ -434,7 +442,7 @@ where
 
         // Zero out the new table before use.
         ctx.mapper.with_page_table(new_pa, |new_pgtable| {
-            core::ptr::write_bytes(new_pgtable.as_ptr_mut() as *mut _ as *mut u8, 0, PAGE_SIZE)
+            core::ptr::write_bytes(new_pgtable.as_ptr_mut() as *mut _ as *mut u8, 0, PAGE_SIZE);
         })?;
 
         // Set the descriptor at the current level to point to the new table.

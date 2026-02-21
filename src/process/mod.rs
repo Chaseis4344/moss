@@ -1,3 +1,5 @@
+use crate::drivers::timer::Instant;
+use crate::sched::CPU_STAT;
 use crate::{
     arch::ArchImpl,
     kernel::cpu_id::CpuId,
@@ -13,19 +15,19 @@ use alloc::{
     sync::{Arc, Weak},
 };
 use core::fmt::Display;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use creds::Credentials;
 use fd_table::FileDescriptorTable;
 use libkernel::{
     UserAddressSpace, VirtualMemory,
     error::{KernelError, Result},
-    fs::Inode,
+    fs::{Inode, pathbuf::PathBuf},
     memory::{
         address::{UA, VA},
-        page_alloc::PageAllocation,
-        proc_vm::vmarea::AccessKind,
+        allocators::phys::PageAllocation,
+        proc_vm::{ProcessVM, vmarea::AccessKind},
     },
 };
-use libkernel::{fs::pathbuf::PathBuf, memory::proc_vm::ProcessVM};
 use ptrace::PTrace;
 use thread_group::{Tgid, ThreadGroup};
 
@@ -142,7 +144,7 @@ impl Display for TaskState {
             TaskState::Sleeping => "S",
             TaskState::Finished => "Z",
         };
-        write!(f, "{}", state_str)
+        write!(f, "{state_str}")
     }
 }
 
@@ -185,6 +187,9 @@ pub struct Task {
     pub state: Arc<SpinLock<TaskState>>,
     pub last_cpu: SpinLock<CpuId>,
     pub ptrace: SpinLock<PTrace>,
+    pub utime: AtomicUsize,
+    pub stime: AtomicUsize,
+    pub last_account: AtomicUsize,
 }
 
 impl Task {
@@ -200,13 +205,13 @@ impl Task {
         self.tid
     }
 
-    /// Return a new desctiptor that uniquely represents this task in the
+    /// Return a new descriptor that uniquely represents this task in the
     /// system.
     pub fn descriptor(&self) -> TaskDescriptor {
         TaskDescriptor::from_tgid_tid(self.process.tgid, self.tid)
     }
 
-    /// Get a page from the task's address space, in an atomic fasion - i.e.
+    /// Get a page from the task's address space, in an atomic fashion - i.e.
     /// with the process address space locked.
     ///
     /// Handle any faults such that the page will be resident in memory and return
@@ -267,6 +272,39 @@ impl Task {
                 }
             }
         }
+    }
+
+    pub fn update_utime(&self, now: Instant) {
+        let now = now.user_normalized();
+        let now = now.ticks() as usize;
+        let last_account = self.last_account.load(Ordering::Relaxed);
+        let delta = now.saturating_sub(last_account);
+        if self.is_idle_task() {
+            CPU_STAT.get().idle.fetch_add(delta, Ordering::Relaxed);
+        } else {
+            CPU_STAT.get().user.fetch_add(delta, Ordering::Relaxed);
+        }
+        self.utime.fetch_add(delta, Ordering::Relaxed);
+        self.process.utime.fetch_add(delta, Ordering::Relaxed);
+        self.last_account.store(now, Ordering::Relaxed);
+    }
+
+    pub fn update_stime(&self, now: Instant) {
+        let now = now.user_normalized();
+        let now = now.ticks() as usize;
+        let last_account = self.last_account.load(Ordering::Relaxed);
+        let delta = now.saturating_sub(last_account);
+        CPU_STAT.get().system.fetch_add(delta, Ordering::Relaxed);
+        self.stime.fetch_add(delta, Ordering::Relaxed);
+        self.process.stime.fetch_add(delta, Ordering::Relaxed);
+        self.last_account.store(now, Ordering::Relaxed);
+    }
+
+    pub fn reset_last_account(&self, now: Instant) {
+        let now = now.user_normalized();
+        let now = now.ticks() as usize;
+        self.last_account.store(now, Ordering::Relaxed);
+        self.last_account.store(now, Ordering::Relaxed);
     }
 }
 

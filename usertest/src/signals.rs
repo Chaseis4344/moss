@@ -28,8 +28,6 @@ fn register_handler(signum: libc::c_int, restart: bool) {
 }
 
 fn test_interruptible_nanosleep() {
-    print!("Testing interruptible nanosleep (EINTR) ...");
-
     register_handler(libc::SIGALRM, false);
 
     unsafe {
@@ -72,17 +70,11 @@ fn test_interruptible_nanosleep() {
         // The remaining time should be updated (approx 4 seconds left)
         assert!(rem.tv_sec >= 3 && rem.tv_sec <= 5);
     }
-    println!(" OK");
 }
 
-register_test!(
-    test_interruptible_nanosleep,
-    "Testing interruptible nanosleep"
-);
+register_test!(test_interruptible_nanosleep);
 
 fn test_interruptible_read_pipe() {
-    print!("Testing interruptible read (pipe) ...");
-
     register_handler(libc::SIGALRM, false);
 
     unsafe {
@@ -117,17 +109,11 @@ fn test_interruptible_read_pipe() {
         assert_eq!(err.raw_os_error(), Some(libc::EINTR));
         assert!(SIGNAL_CAUGHT.load(Ordering::SeqCst));
     }
-    println!(" OK");
 }
 
-register_test!(
-    test_interruptible_read_pipe,
-    "Testing interruptible read (pipe)"
-);
+register_test!(test_interruptible_read_pipe);
 
 fn test_interruptible_waitpid() {
-    print!("Testing interruptible waitpid ...");
-
     register_handler(libc::SIGALRM, false);
 
     unsafe {
@@ -168,7 +154,6 @@ fn test_interruptible_waitpid() {
             );
         }
     }
-    println!(" OK");
 }
 
-register_test!(test_interruptible_waitpid, "Testing interruptible waitpid");
+register_test!(test_interruptible_waitpid);

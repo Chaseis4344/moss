@@ -3,6 +3,11 @@
 #![feature(used_with_arg)]
 #![feature(likely_unlikely)]
 #![feature(box_as_ptr)]
+#![expect(internal_features)]
+#![feature(core_intrinsics)]
+#![feature(custom_test_frameworks)]
+#![reexport_test_harness_main = "test_main"]
+#![test_runner(crate::testing::test_runner)]
 
 use alloc::{
     boxed::Box,
@@ -33,6 +38,7 @@ use sched::{
 };
 
 extern crate alloc;
+extern crate moss_macros;
 
 mod arch;
 mod clock;
@@ -45,6 +51,8 @@ mod memory;
 mod process;
 mod sched;
 mod sync;
+#[cfg(test)]
+pub mod testing;
 
 #[panic_handler]
 fn on_panic(info: &PanicInfo) -> ! {
@@ -132,8 +140,8 @@ async fn launch_init(mut opts: KOptions) {
 
     // Now that the root fs has been mounted, set the real root inode as the
     // cwd and root.
-    *task.cwd.lock_save_irq() = (VFS.root_inode(), PathBuf::new());
-    *task.root.lock_save_irq() = (VFS.root_inode(), PathBuf::new());
+    *task.cwd.lock_save_irq() = (VFS.root_inode(), PathBuf::from("/"));
+    *task.root.lock_save_irq() = (VFS.root_inode(), PathBuf::from("/"));
 
     let console = VFS
         .open(
@@ -160,6 +168,9 @@ async fn launch_init(mut opts: KOptions) {
             .insert(console.clone())
             .expect("Could not clone FD");
     }
+
+    #[cfg(test)]
+    test_main();
 
     drop(task);
 
@@ -203,11 +214,11 @@ fn parse_args(args: &str) -> KOptions {
 
                     kopts.automounts.push((PathBuf::from(path), fs.to_string()));
                 }
-                Opt::Long(x) => warn!("Unknown option {}", x),
-                Opt::Short(x) => warn!("Unknown option {}", x),
+                Opt::Long(x) => warn!("Unknown option {x}"),
+                Opt::Short(x) => warn!("Unknown option {x}"),
             },
             Ok(None) => return kopts,
-            Err(e) => error!("Could not parse option: {}, ignoring.", e),
+            Err(e) => error!("Could not parse option: {e}, ignoring."),
         }
     }
 }
@@ -221,5 +232,5 @@ pub fn kmain(args: String, ctx_frame: *mut UserCtx) {
 
     spawn_kernel_work(launch_init(kopts));
 
-    dispatch_userspace_task(ctx_frame)
+    dispatch_userspace_task(ctx_frame);
 }

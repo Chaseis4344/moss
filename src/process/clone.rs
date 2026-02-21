@@ -10,12 +10,15 @@ use crate::{
 };
 use alloc::boxed::Box;
 use bitflags::bitflags;
+use core::sync::atomic::AtomicUsize;
 use libkernel::memory::address::TUA;
 use libkernel::{
     error::{KernelError, Result},
     memory::address::UA,
 };
 use ringbuf::Arc;
+
+pub static NUM_FORKS: AtomicUsize = AtomicUsize::new(0);
 
 bitflags! {
     #[derive(Debug)]
@@ -62,6 +65,7 @@ pub async fn sys_clone(
         let current_task = current_task();
 
         let mut user_ctx = *current_task.ctx.user();
+<<<<<<< HEAD
         
         //
         // TODO: Make this arch indepdenant. The child returns '0' on clone.
@@ -73,6 +77,11 @@ pub async fn sys_clone(
         {
             user_ctx.x[0] = 0;
         }
+=======
+
+        // TODO: Make this arch independent. The child returns '0' on clone.
+        user_ctx.x[0] = 0;
+>>>>>>> hex-sun-upstream
 
         //This may be a Thread location String, which is why it is being used as a stack pointer
         //This should be rengineered eventually such that the kernel has it's own tiny VM for stack
@@ -83,7 +92,7 @@ pub async fn sys_clone(
 
         #[cfg(target_arch = "aarch64")]
         if flags.contains(CloneFlags::CLONE_SETTLS) {
-            // TODO: Make this arch indepdenant.
+            // TODO: Make this arch independent.
             user_ctx.tpid_el0 = tls as _;
         }
 
@@ -103,13 +112,13 @@ pub async fn sys_clone(
                 user_ctx.sp_el0 = newsp.value() as _;
             }
             (
-                // A new task whtin this thread group.
+                // A new task within this thread group.
                 current_task.process.clone(),
                 current_task.process.next_tid(),
             )
         } else {
             let tgid_parent = if flags.contains(CloneFlags::CLONE_PARENT) {
-                // Use the parnent's parent as the new parent.
+                // Use the parent's parent as the new parent.
                 current_task
                     .process
                     .parent
@@ -192,7 +201,11 @@ pub async fn sys_clone(
                 state: Arc::new(SpinLock::new(TaskState::Runnable)),
                 last_cpu: SpinLock::new(CpuId::this()),
                 ptrace: SpinLock::new(ptrace),
+                utime: AtomicUsize::new(0),
+                stime: AtomicUsize::new(0),
+                last_account: AtomicUsize::new(0),
             }),
+            in_syscall: false,
         }
     };
 
@@ -209,6 +222,7 @@ pub async fn sys_clone(
         .insert(tid, Arc::downgrade(&new_task.t_shared));
 
     sched::insert_task_cross_cpu(Box::new(new_task));
+    NUM_FORKS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 
     // Honour CLONE_*SETTID semantics for the parent and (shared-VM) child.
     if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && !parent_tidptr.is_null() {

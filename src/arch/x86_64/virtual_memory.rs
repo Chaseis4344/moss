@@ -41,6 +41,12 @@ impl VirtualMemory for X86_64 {
  type PageTableRoot = PageTable;
  type ProcessAddressSpace = X86ArchProccessAddressSpace;
  type KernelAddressSpace = X86ArchKernAddressSpace;
+impl VirtualMemory for X86_64 {
+
+// Need to be defined at some point
+ type PageTableRoot = /* Type */ ;
+ type ProcessAddressSpace = /* Type */;
+ type KernelAddressSpace = /* Type */;
  const PAGE_OFFSET: usize = 42;
 
  fn kern_address_space() -> &'static SpinLockIrq<<Self as VirtualMemory>::KernelAddressSpace, Self> { 
@@ -114,3 +120,5 @@ impl KernAddressSpace for X86ArchKernAddressSpace {
             todo!()
         }
 } 
+=======
+>>>>>>> hex-sun-upstream

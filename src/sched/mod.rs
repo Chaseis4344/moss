@@ -1,15 +1,17 @@
 use crate::arch::ArchImpl;
 use crate::drivers::timer::{Instant, now};
+#[cfg(feature = "smp")]
 use crate::interrupts::cpu_messenger::{Message, message_cpu};
 use crate::kernel::cpu_id::CpuId;
 use crate::process::owned::OwnedTask;
 use crate::{
     arch::Arch,
-    per_cpu,
+    per_cpu_private, per_cpu_shared,
     process::{TASK_LIST, TaskDescriptor, TaskState},
 };
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc};
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::fmt::Debug;
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use core::time::Duration;
 use current::{CUR_TASK_PTR, current_task};
 use libkernel::{UserAddressSpace, error::Result};
@@ -23,7 +25,51 @@ pub mod sched_task;
 pub mod uspc_ret;
 pub mod waker;
 
-per_cpu! {
+pub static NUM_CONTEXT_SWITCHES: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Default)]
+pub struct CpuStat<T>
+where
+    T: Debug + Default,
+{
+    pub user: T,
+    pub nice: T,
+    pub system: T,
+    pub idle: T,
+    pub iowait: T,
+    pub irq: T,
+    pub softirq: T,
+    pub steal: T,
+    pub guest: T,
+    pub guest_nice: T,
+}
+
+impl CpuStat<AtomicUsize> {
+    pub fn to_usize(&self) -> CpuStat<usize> {
+        CpuStat {
+            user: self.user.load(Ordering::Relaxed),
+            nice: self.nice.load(Ordering::Relaxed),
+            system: self.system.load(Ordering::Relaxed),
+            idle: self.idle.load(Ordering::Relaxed),
+            iowait: self.iowait.load(Ordering::Relaxed),
+            irq: self.irq.load(Ordering::Relaxed),
+            softirq: self.softirq.load(Ordering::Relaxed),
+            steal: self.steal.load(Ordering::Relaxed),
+            guest: self.guest.load(Ordering::Relaxed),
+            guest_nice: self.guest_nice.load(Ordering::Relaxed),
+        }
+    }
+}
+
+per_cpu_shared! {
+    pub static CPU_STAT: CpuStat<AtomicUsize> = CpuStat::default;
+}
+
+pub fn get_cpu_stat(cpu_id: CpuId) -> CpuStat<usize> {
+    CPU_STAT.get_by_cpu(cpu_id.value()).to_usize()
+}
+
+per_cpu_private! {
     static SCHED_STATE: SchedState = SchedState::new;
 }
 
@@ -84,6 +130,7 @@ pub fn spawn_kernel_work(fut: impl Future<Output = ()> + 'static + Send) {
 /// First 16 bits: CPU ID
 /// Next 24 bits: Weight
 /// Next 24 bits: Number of waiting tasks
+#[cfg(feature = "smp")]
 static LEAST_TASKED_CPU_INFO: AtomicU64 = AtomicU64::new(0);
 const WEIGHT_SHIFT: u32 = 16;
 const WAITING_SHIFT: u32 = WEIGHT_SHIFT + 24;
@@ -93,11 +140,6 @@ fn get_best_cpu() -> CpuId {
     // Get the CPU with the least number of tasks.
     let least_tasked_cpu_info = LEAST_TASKED_CPU_INFO.load(Ordering::Acquire);
     CpuId::from_value((least_tasked_cpu_info & 0xffff) as usize)
-}
-
-#[cfg(not(feature = "smp"))]
-fn get_best_cpu() -> CpuId {
-    CpuId::this()
 }
 
 /// Insert the given task onto a CPU's run queue.
@@ -154,7 +196,7 @@ impl SchedState {
             None
         }
 
-        per_cpu! {
+        per_cpu_private! {
             static LAST_UPDATE: Option<Instant> = none;
         }
 
@@ -264,6 +306,10 @@ impl SchedState {
         let mut needs_resched = self.force_resched;
 
         if let Some(current) = self.run_q.current_mut() {
+            current.update_accounting(Some(now_inst));
+            // Reset accounting baseline after updating stats to avoid double-counting
+            // the same time interval on the next scheduler tick.
+            current.reset_last_account(now_inst);
             // If the current task is IDLE, we always want to proceed to the
             // scheduler core to see if a real task has arrived.
             if current.is_idle_task() {
@@ -309,7 +355,10 @@ impl SchedState {
 
         // Update all context since the task has switched.
         if let Some(new_current) = self.run_q.current_mut() {
+            NUM_CONTEXT_SWITCHES.fetch_add(1, Ordering::Relaxed);
             ArchImpl::context_switch(new_current.t_shared.clone());
+            let now = now().unwrap();
+            new_current.reset_last_account(now);
             CUR_TASK_PTR.borrow_mut().set_current(&mut new_current.task);
         }
     }

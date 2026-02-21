@@ -1,9 +1,12 @@
 /target
 /build
 .gdb_history
+.gdbinit
 *.img
 rust-project.json
 .idea/
-.vscode/
 error.log
 ext4_mount/
+rust-project.json
+cargo.lock
+error.log

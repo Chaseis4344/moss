@@ -1,6 +1,6 @@
 use super::Driver;
 use crate::interrupts::{InterruptDescriptor, InterruptHandler};
-use crate::per_cpu;
+use crate::per_cpu_private;
 use crate::sync::OnceLock;
 use alloc::{collections::binary_heap::BinaryHeap, sync::Arc};
 use core::{
@@ -13,11 +13,54 @@ use core::{
 #[cfg(target_arch = "aarch64")]
 pub mod armv8_arch;
 
+const USER_HZ: u64 = 100;
+
 /// Represents a fixed point in monotonic time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Instant {
     ticks: u64,
     freq: u64,
+}
+
+impl Instant {
+    pub fn ticks(&self) -> u64 {
+        self.ticks
+    }
+
+    pub fn freq(&self) -> u64 {
+        self.freq
+    }
+
+    pub fn user_normalized(&self) -> Self {
+        // Userspace assumes everything runs at USER_HZ frequency.
+        if self.freq == USER_HZ {
+            *self
+        } else {
+            let ticks = (self.ticks as u128 * USER_HZ as u128) / self.freq as u128;
+            Self {
+                ticks: ticks as u64,
+                freq: USER_HZ,
+            }
+        }
+    }
+
+    pub fn from_user_normalized(ticks: u64) -> Self {
+        Self {
+            ticks,
+            freq: USER_HZ,
+        }
+    }
+}
+
+impl From<Instant> for Duration {
+    fn from(instant: Instant) -> Self {
+        let secs = instant.ticks / instant.freq;
+        let remaining_ticks = instant.ticks % instant.freq;
+
+        let nanos = ((remaining_ticks as u128 * 1_000_000_000) / instant.freq as u128) as u32;
+
+        Duration::new(secs, nanos)
+    }
 }
 
 impl Ord for Instant {
@@ -186,14 +229,14 @@ impl SysTimer {
                 Poll::Pending
             }
         })
-        .await
+        .await;
     }
 
     /// Schedule a preemption event for the current CPU.
     pub fn schedule_preempt(&self, when: Instant) {
         let mut wake_q = WAKEUP_Q.borrow_mut();
 
-        // Insert the pre-emption event.
+        // Insert the preemption event.
         wake_q.push(WakeupEvent {
             when,
             what: WakeupKind::Preempt,
@@ -206,7 +249,7 @@ impl SysTimer {
     }
 
     /// Arms the hardware timer on the current CPU so that the next scheduled
-    /// `WakeupEvent` (or the fallback pre-emption tick) will fire.
+    /// `WakeupEvent` (or the fallback preemption tick) will fire.
     /// Secondary CPUs should call this right after they have enabled their
     /// interrupt controller so that they start receiving timer interrupts.
     pub fn kick_current_cpu(&self) {
@@ -236,7 +279,7 @@ pub fn now() -> Option<Instant> {
 }
 
 /// Puts the current task to sleep for `duration`. If no timer driver has yet
-/// been loaded, the funtion returns without sleeping.
+/// been loaded, the function returns without sleeping.
 pub async fn sleep(duration: Duration) {
     // A sleep of zero duration returns now.
     if duration.is_zero() {
@@ -244,7 +287,7 @@ pub async fn sleep(duration: Duration) {
     }
 
     if let Some(timer) = SYS_TIMER.get() {
-        timer.sleep(duration).await
+        timer.sleep(duration).await;
     }
 }
 
@@ -256,7 +299,7 @@ pub fn kick_current_cpu() {
     }
 }
 
-/// Arms a pre-emption timer for the running task on this CPU.
+/// Arms a preemption timer for the running task on this CPU.
 /// Called by the scheduler every time it issues a new eligible virtual deadline.
 pub fn schedule_preempt(when: Instant) {
     if let Some(timer) = SYS_TIMER.get() {
@@ -266,6 +309,6 @@ pub fn schedule_preempt(when: Instant) {
 
 static SYS_TIMER: OnceLock<Arc<SysTimer>> = OnceLock::new();
 
-per_cpu! {
+per_cpu_private! {
     static WAKEUP_Q: BinaryHeap<WakeupEvent> = BinaryHeap::new;
 }
