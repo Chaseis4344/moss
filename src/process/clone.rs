@@ -17,37 +17,6 @@ use libkernel::{
 };
 use ringbuf::Arc;
 
-
-#[cfg(target_arch = "aarch64")]
-bitflags! {
-    #[derive(Debug)]
-    pub struct CloneFlags: u32 {
-        const CLONE_VM = 0x100;
-        const CLONE_FS = 0x200;
-        const CLONE_FILES = 0x400;
-        const CLONE_SIGHAND = 0x800;
-        const CLONE_PTRACE = 0x2000;
-        const CLONE_VFORK = 0x4000;
-        const CLONE_PARENT = 0x8000;
-        const CLONE_THREAD = 0x10000;
-        const CLONE_NEWNS = 0x20000;
-        const CLONE_SYSVSEM = 0x40000;
-        const CLONE_SETTLS = 0x80000;
-        const CLONE_PARENT_SETTID = 0x100000;
-        const CLONE_CHILD_CLEARTID = 0x200000;
-        const CLONE_DETACHED = 0x400000;
-        const CLONE_UNTRACED = 0x800000;
-        const CLONE_CHILD_SETTID = 0x01000000;
-        const CLONE_NEWCGROUP = 0x02000000;
-        const CLONE_NEWUTS = 0x04000000;
-        const CLONE_NEWIPC = 0x08000000;
-        const CLONE_NEWUSER = 0x10000000;
-        const CLONE_NEWPID = 0x20000000;
-        const CLONE_NEWNET = 0x40000000;
-        const CLONE_IO = 0x80000000;
-    }
-}
-
 bitflags! {
     #[derive(Debug)]
     pub struct CloneFlags: u32 {
@@ -105,6 +74,13 @@ pub async fn sys_clone(
             user_ctx.x[0] = 0;
         }
 
+        //This may be a Thread location String, which is why it is being used as a stack pointer
+        //This should be rengineered eventually such that the kernel has it's own tiny VM for stack
+        //management
+        // TRIAGE: I have used #[cfg()] here explicitly to turn off this feature, future
+        // implementations will be required to implement whatever is done here properly, and avoid
+        // arm-dependent code
+
         #[cfg(target_arch = "aarch64")]
         if flags.contains(CloneFlags::CLONE_SETTLS) {
             // TODO: Make this arch indepdenant.
@@ -117,7 +93,11 @@ pub async fn sys_clone(
                 // set.
                 return Err(KernelError::InvalidValue);
             }
-
+            
+            // TRIAGE: I have used #[cfg()] here explicitly to turn off this feature, future
+            // implementations will be required to implement whatever is done here properly, and avoid
+            // arm-dependent code
+            //This redirects the arm64 main stack pointer (el0) to a new stack pointer in 
             #[cfg(target_arch = "aarch64")]
             {
                 user_ctx.sp_el0 = newsp.value() as _;

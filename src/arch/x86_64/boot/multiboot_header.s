@@ -1,16 +1,20 @@
-; Boot script needs to get us into long mode, assume GRUB2 enviroment
+# Boot script needs to get us into long mode, assume GRUB2 enviroment
+
+.extern start
 .section .multiboot_header
-header_start:
-    dd 0xe85250d6                ; magic number (multiboot 2)
-    dd 0                         ; architecture 0 (protected mode i386)
-    dd header_end - header_start ; header length
-    ; checksum
-    dd 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start))
+header_start: 
+    .long 0xe85250d6             # magic number (multiboot 2)
+    .long 0                      # architecture 0 (protected mode i386)
+    .long header_end - header_start
+    # checksum
+    .long 0x100000000 - (0xe85250d6 + 0 + (header_end - header_start))
+    
+    # insert optional multiboot tags here
+.align 8
+  end_tag:
+    # required end tag
+    .word 0 # type
+    .word 0 # flags
+    .long end_tag - header_end # size
+header_end: 
 
-    ; insert optional multiboot tags here
-
-    ; required end tag
-    dw 0    ; type
-    dw 0    ; flags
-    dd 8    ; size
-header_end:

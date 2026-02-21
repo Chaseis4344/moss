@@ -11,25 +11,36 @@
 #
 start:
     mov esp, stack_top
-    
-    call check_multiboot # ensures we booted from a multiboot compliant bootloader (e.g. GRUB2)
-    call check_cpuid     # looks for cpuid support
-    call check_long_mode # looks for long mode support
+   
+    #after_xy labels are replacing returns for control flow, as I cannot trust rust to consistenly execute the ret instruction properly
+    jmp check_multiboot # ensures we booted from a multiboot compliant bootloader (e.g. GRUB2)
+    after_multiboot:
+  
+    jmp check_cpuid     # looks for cpuid support
+    after_cpuid:
 
-    call set_up_page_tables # Step 1 for long mode 
-    call enable_paging     
-    
-    lgdt [gdt64.pointer]
+    jmp check_long_mode # looks for long mode support
+    after_long_mode:
+
+    jmp set_up_page_tables # Step 1 for long mode 
+    after_tables:
+
+    mov dword ptr [0xb8000], 0x2f4b2f4f
+    jmp enable_paging     
+    after_paging:
+  
+    mov dword ptr [0xb8004], 0x2f4b2f4f
+    lgdt [gdt64_pointer]
     #The assembler will not let me use a long jump outside of att_syntax, so hacky workaround, use att syntax for the 1 line I need it in and exit back to intel syntax immediately
-  .att_syntax
-    ljmp $gdt64.code, $long_mode_start
+    .att_syntax
+    ljmp $gdt64_code_seg, $long_mode_start
   .intel_syntax noprefix
 check_multiboot:
     cmp eax, 0x36d76289
-    jne .no_multiboot
-    ret
-.no_multiboot:
-    mov al, "0"
+    jne no_multiboot
+    jmp after_multiboot
+no_multiboot:
+    mov al, 0
     jmp error
 
 check_cpuid:
@@ -41,7 +52,7 @@ check_cpuid:
     pop eax
 
     # Copy to ECX as well for comparing later on
-    mov ecx, eax
+    mov eax, ecx
 
     # Flip the ID bit
     xor eax, 1 << 21
@@ -62,26 +73,26 @@ check_cpuid:
     # Compare EAX and ECX. If they are equal then that means the bit
     # wasn't flipped, and CPUID isn't supported.
     cmp eax, ecx
-    je .no_cpuid
-    ret
-.no_cpuid:
-    mov al, "1"
+    je no_cpuid
+    jmp after_cpuid
+no_cpuid:
+    mov al, 1
     jmp error
 check_long_mode:
     # test if extended processor info in available
     mov eax, 0x80000000    # implicit argument for cpuid
     cpuid                  # get highest supported argument
     cmp eax, 0x80000001    # it needs to be at least 0x80000001
-    jb .no_long_mode       # if it's less, the CPU is too old for long mode
+    jb no_long_mode       # if it's less, the CPU is too old for long mode
 
     # use extended info to test if long mode is available
     mov eax, 0x80000001    # argument for extended processor info
     cpuid                  # returns various feature bits in ecx and edx
     test edx, 1 << 29      # test if the LM-bit is set in the D-register
-    jz .no_long_mode       # If it's not set, there is no long mode
-    ret
-.no_long_mode:
-    mov al, "2"
+    jz no_long_mode       # If it's not set, there is no long mode
+    jmp after_long_mode
+no_long_mode:
+    mov al, 2
     jmp error
 set_up_page_tables:
     # map first P4 entry to P3 table
@@ -89,36 +100,37 @@ set_up_page_tables:
     or eax, 0b11 # present + writable
     mov [p4_table], eax
 
+
     # map first P3 entry to P2 table
     mov eax, p2_table
     or eax, 0b11 # present + writable
     mov [p3_table], eax
-
-    # TODO map each P2 entry to a huge 2MiB page
+    
     mov ecx, 0         # counter variable
-.map_p2_table:
+
+map_p2_table:
     # map ecx-th P2 entry to a huge page that starts at address 2MiB*ecx
     mov eax, 0x200000  # 2MiB
     mul ecx            # start address of ecx-th page
     or eax, 0b10000011 # present + writable + huge
-    mov [p2_table + ecx * 8], eax # map ecx-th entry
+    mov [p2_table + ecx * 8], eax# map ecx-th entry
+
 
     inc ecx            # increase counter
     cmp ecx, 512       # if counter == 512, the whole P2 table is mapped
-    jne .map_p2_table  # else map the next entry
-
-    ret
+    jne map_p2_table  # else map the next entry
+    jmp after_tables
 
 enable_paging:
+
     # load P4 to cr3 register (cpu uses this to access the P4 table)
-    mov eax, p4_table
-    mov cr3, eax
+    mov p4_table, eax
+    mov eax, cr3
 
     # enable PAE-flag in cr4 (Physical Address Extension)
-    mov eax, cr4
-    or eax, 1 << 5
-    mov cr4, eax
-
+    mov edx, cr4
+    or edx, 1 << 5
+    mov cr4, edx
     # set the long mode bit in the EFER MSR (model specific register)
     mov ecx, 0xC0000080
     rdmsr
@@ -130,7 +142,9 @@ enable_paging:
     or eax, 1 << 31
     mov cr0, eax
 
-    ret
+    mov dword ptr [0xb8000], 0x2f4b2f4f
+    jmp after_paging
+
 # Prints `ERR: ` and the given error code to screen and hangs.
 # parameter: error code (in ascii) in al
 error:
@@ -154,10 +168,18 @@ stack_top:
 
 
 .section .rodata
-gdt64:
-    .quad 0 # zero entry
-.code: .set gdt64.code, . - gdt64 # new
-    .quad (1<<43) | (1<<44) | (1<<47) | (1<<53) # code segment
-.pointer:
-    .word . - gdt64 - 1
-    .quad gdt64
+gdt64_zero_entry:
+  .quad 0 // zero entry
+
+gdt64_code_entry:
+  .set gdt64_code_seg, gdt64_code_entry - gdt64_zero_entry
+  .quad (1<<44) | (1<<47) | (1<<43) | (1<<53) // code segment
+
+gdt64_data_entry:
+  .set gdt64_data_seg, gdt64_data_entry - gdt64_zero_entry
+  .quad (1<<44) | (1<<47) | (1<<41) // data segment
+
+gdt64_pointer:
+  .set gdt64_pointer_seg, gdt64_data_entry - gdt64_pointer - 1
+  .word gdt64_pointer_seg
+  .quad gdt64_zero_entry

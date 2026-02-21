@@ -6,9 +6,8 @@ fn main() {
         Ok(arch) if arch == "x86_64" => {
             println!("cargo::rustc-link-arg=--nmagic");
             println!("cargo::rustc-link-arg=--no-gc-sections");
-            println!("cargo::rustc-link-arg=-z norelro");
-
-            println!("cargo::rustc-link-arg=--verbose");
+            println!("cargo::rustc-link-arg=--no-dynamic-linker");
+            println!("cargo::rustc-link-arg=--no-pie");
             PathBuf::from("./src/arch/x86_64/boot/linker.ld")
         },
         Ok(arch) => {

@@ -25,8 +25,8 @@ impl CpuOps for super::X86_64 {
         unsafe {
             //Should work in theory - valid on all x64 things
                 asm!("pushf", //flags to stack
-                    "pop ax", //stack to reg
-                    out("eax") flags
+                    "pop rax", //stack to reg
+                    out("rax") flags
                 ); //Get mask out
         }
         //Unsure on intention of this function, if we want to only extract the Interrupt flag from

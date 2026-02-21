@@ -1,8 +1,8 @@
 .global long_mode_start
-
 .section .text
 .code64
 long_mode_start:
+
     # load 0 into all data segment registers
     mov ax, 0
     mov ss, ax
@@ -11,15 +11,14 @@ long_mode_start:
     mov fs, ax
     mov gs, ax
     
-    # call the rust main
-    #extern rust_main     
-    #call rust_main
 
-    # call kernel main
-    .extern arch_stage_3
-    call arch_stage_3
-    
+
     # print `OKAY` to screen
     mov rax, 0x2f592f412f4b2f4f
     mov qword ptr [0xb8000], rax
+    .extern arch_stage_2
+    call arch_stage_2
+
+    
     hlt
+  

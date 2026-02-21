@@ -20,6 +20,6 @@ SECTIONS {
     }
     .bss : {
       *(COMMON)
-      *(.bss.bss.*)
+      *(.bss .bss.*)
     }
 }
