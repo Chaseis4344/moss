@@ -12,10 +12,17 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c85d96f36022f650ee6f184f1353d077124754cecf6a3e91085a708495c6f5a"
+=======
+name = "acpi"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ccf6d4e668d9babca9103f59f305d3bc55e24355cf166dbddf5a7a5e1243d06"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "bit_field",
  "bitflags",
@@ -27,6 +34,7 @@ dependencies = [
 
 [[package]]
 name = "arm-pl011-uart"
+<<<<<<< HEAD
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
@@ -38,12 +46,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b24c708955a2b308f2ef06b78c1e676d69870773f78ccf78aff6ffdd6136d90"
 dependencies = [
  "bitflags 2.11.1",
+=======
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8797e113733a36b5fa906c81aefc126d255b88dd1c10a737749aa22ec7736b6a"
+dependencies = [
+ "bitflags",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
  "safe-mmio",
  "thiserror",
  "zerocopy",
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "arm_pl031"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -61,6 +77,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -72,6 +90,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "atomic_enum"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -83,6 +102,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -96,6 +117,7 @@ checksum = "1e4b40c7323adcfc0a41c4b88143ed58346ff65a288fc144329c5c45e05d70c6"
 
 [[package]]
 name = "bitflags"
+<<<<<<< HEAD
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
@@ -123,6 +145,11 @@ checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
 ]
+=======
+version = "2.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "byteorder"
@@ -143,6 +170,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+<<<<<<< HEAD
 name = "chacha20"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -154,11 +182,14 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "colored"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
+<<<<<<< HEAD
  "windows-sys",
 ]
 
@@ -179,6 +210,16 @@ checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
 ]
+=======
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "const_fn"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f8a2ca5ac02d09563609681103aada9e1777d54fc57a5acd7a41404f9c93b6e"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "crc"
@@ -191,6 +232,7 @@ dependencies = [
 
 [[package]]
 name = "crc-catalog"
+<<<<<<< HEAD
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
@@ -198,6 +240,11 @@ name = "const_fn"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f8a2ca5ac02d09563609681103aada9e1777d54fc57a5acd7a41404f9c93b6e"
+=======
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "crossbeam-utils"
@@ -206,6 +253,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+<<<<<<< HEAD
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -257,6 +305,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -266,6 +316,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -300,12 +351,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "errno"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
+<<<<<<< HEAD
  "windows-sys",
 ]
 
@@ -340,10 +394,24 @@ dependencies = [
  "bitflags 2.11.1",
  "crc",
  "maybe-async",
+=======
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "ext4-view"
+version = "0.9.3"
+source = "git+https://github.com/arihant2math/ext4-view-rs.git?branch=main#86785325204a60c02a74d2975db19af570878965"
+dependencies = [
+ "async-trait",
+ "bitflags",
+ "crc",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
 name = "fdt-parser"
+<<<<<<< HEAD
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e175b7c46c98b80c8130665802cb3d5407fb6042b70a3d25f1b6edcb8f3de41"
@@ -353,6 +421,11 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+=======
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f95f0bda5ff920492f6573294d8e3a99b75ee2e5ef93ab313fc6d517fa46785"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "futures"
@@ -428,6 +501,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -438,6 +512,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "getargs"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -445,13 +521,20 @@ checksum = "084c6b182b01dec54ff12986b9cc8859a9b0d92b074f878c382a4481a070e66e"
 
 [[package]]
 name = "getrandom"
+<<<<<<< HEAD
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de51e6874e94e7bf76d726fc5d13ba782deca734ff60d5bb2fb2607c7406555"
+=======
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
+<<<<<<< HEAD
  "rand_core",
  "wasip2",
  "wasip3",
@@ -513,28 +596,44 @@ dependencies = [
  "hashbrown 0.17.1",
  "serde",
  "serde_core",
+=======
+ "wasip2",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
 name = "intrusive-collections"
+<<<<<<< HEAD
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "80e165935eba36cb526af8389effd2005a741adcbb6ed32106cc68e3f7b92960"
+=======
+version = "0.9.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "189d0897e4cbe8c75efedf3502c18c887b05046e59d28404d4d8e46cbc4d1e86"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "memoffset",
 ]
 
 [[package]]
 name = "inventory"
+<<<<<<< HEAD
 version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+=======
+version = "0.3.22"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "009ae045c87e7082cb72dab0ccd01ae075dd00141ddc108f43a0ea150a9e7227"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "rustversion",
 ]
 
 [[package]]
 name = "itoa"
+<<<<<<< HEAD
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
@@ -558,6 +657,25 @@ dependencies = [
  "async-trait",
  "bitflags 2.11.1",
  "ext4plus",
+=======
+version = "1.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
+
+[[package]]
+name = "libc"
+version = "0.2.182"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
+
+[[package]]
+name = "libkernel"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "bitflags",
+ "ext4-view",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
  "intrusive-collections",
  "log",
  "object",
@@ -594,6 +712,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
+<<<<<<< HEAD
 name = "managed"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -611,6 +730,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -627,6 +748,7 @@ dependencies = [
 
 [[package]]
 name = "mio"
+<<<<<<< HEAD
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "50b7e5b27aa02a74bac8c3f23f448f8d87ff11f92d3aac1a6ed369ee08cc56c1"
@@ -634,6 +756,15 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys",
+=======
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
+dependencies = [
+ "libc",
+ "wasi",
+ "windows-sys 0.61.2",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
@@ -643,16 +774,25 @@ dependencies = [
  "aarch64-cpu",
  "acpi",
  "arm-pl011-uart",
+<<<<<<< HEAD
  "arm_pl031",
  "async-trait",
  "atomic_enum",
  "bitflags 2.11.1",
  "blake2",
  "chacha20",
+=======
+ "async-trait",
+ "bitflags",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
  "fdt-parser",
  "futures",
  "getargs",
  "libkernel",
+<<<<<<< HEAD
+=======
+ "linked_list_allocator",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
  "log",
  "moss-macros",
  "object",
@@ -660,10 +800,16 @@ dependencies = [
  "rand",
  "ringbuf",
  "rustc-hash",
+<<<<<<< HEAD
  "smoltcp",
  "time",
  "tock-registers",
  "virtio-drivers",
+=======
+ "static_cell",
+ "time",
+ "tock-registers",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
  "x86_64",
 ]
 
@@ -678,6 +824,7 @@ dependencies = [
 
 [[package]]
 name = "num-conv"
+<<<<<<< HEAD
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6673768db2d862beb9b39a78fdcb1a69439615d5794a1be50caa9bc92c81967"
@@ -687,6 +834,17 @@ name = "object"
 version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
+=======
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
+
+[[package]]
+name = "object"
+version = "0.38.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "271638cd5fa9cca89c4c304675ca658efc4e64a66c716b7cfe1afb4b9611dbbc"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "memchr",
  "rustc-std-workspace-core",
@@ -723,9 +881,15 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pci_types"
+<<<<<<< HEAD
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4325c6aa3cca3373503b1527e75756f9fbfe5fd76be4b4c8a143ee47430b8e0"
+=======
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0c2a105c657261a938ff68ee231c199a3d80eef33976004829de761ef5b1a9b"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "bit_field",
  "bitflags",
@@ -733,9 +897,15 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
+<<<<<<< HEAD
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+=======
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "portable-atomic"
@@ -745,9 +915,15 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "portable-atomic-util"
+<<<<<<< HEAD
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a106d1259c23fac8e543272398ae0e3c0b8d33c88ed73d0cc71b0f1d902618"
+=======
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a9db96d7fa8782dd8c15ce32ffe8680bbd1e978a43bf51a34d39483540495f5"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "portable-atomic",
 ]
@@ -759,6 +935,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
+<<<<<<< HEAD
 name = "prettyplease"
 version = "0.2.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -788,6 +965,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+=======
+name = "ppv-lite86"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
+dependencies = [
+ "zerocopy",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
@@ -801,15 +986,22 @@ dependencies = [
 
 [[package]]
 name = "quote"
+<<<<<<< HEAD
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41f2619966050689382d2b44f664f4bc593e129785a36d6ee376ddf37259b924"
+=======
+version = "1.0.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21b2ebcf727b7760c461f091f9f0f539b77b8e87f2fd88131e7f1b433b3cece4"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "proc-macro2",
 ]
 
 [[package]]
 name = "r-efi"
+<<<<<<< HEAD
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
@@ -822,14 +1014,46 @@ checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
 dependencies = [
  "chacha20",
  "getrandom",
+=======
+version = "5.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
+
+[[package]]
+name = "rand"
+version = "0.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6db2770f06117d490610c7488547d543617b21bfa07796d7a12f6f1bd53850d1"
+dependencies = [
+ "rand_chacha",
+ "rand_core",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
+dependencies = [
+ "ppv-lite86",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
  "rand_core",
 ]
 
 [[package]]
 name = "rand_core"
+<<<<<<< HEAD
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+=======
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
+dependencies = [
+ "getrandom",
+]
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "redox_syscall"
@@ -837,7 +1061,11 @@ version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
+<<<<<<< HEAD
  "bitflags 2.11.1",
+=======
+ "bitflags",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
@@ -852,9 +1080,15 @@ dependencies = [
 
 [[package]]
 name = "rustc-hash"
+<<<<<<< HEAD
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
+=======
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "rustc-std-workspace-core"
@@ -870,6 +1104,7 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "safe-mmio"
+<<<<<<< HEAD
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
@@ -879,6 +1114,11 @@ name = "safe-mmio"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4813ee49326057f105d6d8ca3d8f9265095f26aa7b42094e487028403a594f4c"
+=======
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0a69f884a1511aa811aa94e04559414a66b18ca63f50f84ca31e304f38bad0d"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "zerocopy",
 ]
@@ -890,6 +1130,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+<<<<<<< HEAD
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -905,6 +1146,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -925,6 +1168,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "serde_json"
 version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -938,6 +1182,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "signal-hook-registry"
 version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -960,6 +1206,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
+<<<<<<< HEAD
 name = "smoltcp"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -994,6 +1241,18 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+=======
+name = "socket2"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86f4aa3ad99f2088c990dfa82d367e19cb29268ed67c574d10d0a4bfe71f07e0"
+dependencies = [
+ "libc",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "spinning_top"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1090,9 +1349,15 @@ checksum = "8d2d250f87fb3fb6f225c907cf54381509f47b40b74b1d1f12d2dccbc915bdfe"
 
 [[package]]
 name = "tokio"
+<<<<<<< HEAD
 version = "1.52.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
+=======
+version = "1.49.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "bytes",
  "libc",
@@ -1102,14 +1367,24 @@ dependencies = [
  "signal-hook-registry",
  "socket2",
  "tokio-macros",
+<<<<<<< HEAD
  "windows-sys",
+=======
+ "windows-sys 0.61.2",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
 name = "tokio-macros"
+<<<<<<< HEAD
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+=======
+version = "2.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1117,24 +1392,30 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "typenum"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40ce102ab67701b8526c123c1bab5cbe42d7040ccfd0f64af1a385808d2f43de"
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 
 [[package]]
+<<<<<<< HEAD
 name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "usertest"
 version = "0.1.0"
 dependencies = [
@@ -1145,6 +1426,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1164,6 +1446,8 @@ dependencies = [
  "thiserror",
  "zerocopy",
 ]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "volatile"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1177,6 +1461,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasip2"
+<<<<<<< HEAD
 version = "1.0.3+wasi-0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20064672db26d7cdc89c7798c48a0fdfac8213434a1186e5ef29fd560ae223d6"
@@ -1225,6 +1510,13 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "semver",
+=======
+version = "1.0.2+wasi-0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9517f9239f02c069db75e65f174b3da828fe5f5b945c4dd26bd25d89c03ebcf5"
+dependencies = [
+ "wit-bindgen",
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 ]
 
 [[package]]
@@ -1235,6 +1527,18 @@ checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 
 [[package]]
 name = "windows-sys"
+<<<<<<< HEAD
+=======
+version = "0.60.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb"
+dependencies = [
+ "windows-targets",
+]
+
+[[package]]
+name = "windows-sys"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 version = "0.61.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
@@ -1243,10 +1547,79 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
+=======
+name = "windows-targets"
+version = "0.53.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4945f9f551b88e0d65f3db0bc25c33b8acea4d9e41163edf90dcd0b19f9069f3"
+dependencies = [
+ "windows-link",
+ "windows_aarch64_gnullvm",
+ "windows_aarch64_msvc",
+ "windows_i686_gnu",
+ "windows_i686_gnullvm",
+ "windows_i686_msvc",
+ "windows_x86_64_gnu",
+ "windows_x86_64_gnullvm",
+ "windows_x86_64_msvc",
+]
+
+[[package]]
+name = "windows_aarch64_gnullvm"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9d8416fa8b42f5c947f8482c43e7d89e73a173cead56d044f6a56104a6d1b53"
+
+[[package]]
+name = "windows_aarch64_msvc"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9d782e804c2f632e395708e99a94275910eb9100b2114651e04744e9b125006"
+
+[[package]]
+name = "windows_i686_gnu"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "960e6da069d81e09becb0ca57a65220ddff016ff2d6af6a223cf372a506593a3"
+
+[[package]]
+name = "windows_i686_gnullvm"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa7359d10048f68ab8b09fa71c3daccfb0e9b559aed648a8f95469c27057180c"
+
+[[package]]
+name = "windows_i686_msvc"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e7ac75179f18232fe9c285163565a57ef8d3c89254a30685b57d83a38d326c2"
+
+[[package]]
+name = "windows_x86_64_gnu"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c3842cdd74a865a8066ab39c8a7a473c0778a3f29370b5fd6b4b9aa7df4a499"
+
+[[package]]
+name = "windows_x86_64_gnullvm"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ffa179e2d07eee8ad8f57493436566c7cc30ac536a3379fdf008f47f6bb7ae1"
+
+[[package]]
+name = "windows_x86_64_msvc"
+version = "0.53.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
+
+[[package]]
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 name = "wit-bindgen"
 version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
+<<<<<<< HEAD
 dependencies = [
  "wit-bindgen-rust-macro",
 ]
@@ -1335,6 +1708,8 @@ dependencies = [
  "unicode-xid",
  "wasmparser",
 ]
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 
 [[package]]
 name = "x86_64"
@@ -1351,26 +1726,41 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
+<<<<<<< HEAD
 version = "0.8.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eed437bf9d6692032087e337407a86f04cd8d6a16a37199ed57949d415bd68e9"
+=======
+version = "0.8.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db6d35d663eadb6c932438e763b262fe1a70987f9ae936e60158176d710cae4a"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
+<<<<<<< HEAD
 version = "0.8.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70e3cd084b1788766f53af483dd21f93881ff30d7320490ec3ef7526d203bad4"
+=======
+version = "0.8.39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4122cd3169e94605190e77839c9a40d40ed048d305bfdc146e7df40ab0f3e517"
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
 dependencies = [
  "proc-macro2",
  "quote",
  "syn",
 ]
+<<<<<<< HEAD
 
 [[package]]
 name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+=======
+>>>>>>> 1eacf71 (chore: conditionally compile arch-specific drivers)
