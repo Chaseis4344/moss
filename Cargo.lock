@@ -107,7 +107,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
-<<<<<<< HEAD
 name = "blake2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -126,8 +125,6 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> e3c3c05 (chore: seperate deps for target arch)
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -146,6 +143,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
+<<<<<<< HEAD
 name = "chacha20"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -157,6 +155,9 @@ dependencies = [
 ]
 
 [[package]]
+=======
+<<<<<<< HEAD
+>>>>>>> 5f7bf4f (chore: Update Depends for x86_64)
 name = "colored"
 version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -197,6 +198,12 @@ name = "crc-catalog"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
+=======
+name = "const_fn"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f8a2ca5ac02d09563609681103aada9e1777d54fc57a5acd7a41404f9c93b6e"
+>>>>>>> 2662561 (chore: Update Depends for x86_64)
 
 [[package]]
 name = "crossbeam-utils"
@@ -665,7 +672,11 @@ dependencies = [
  "smoltcp",
  "time",
  "tock-registers",
+<<<<<<< HEAD
  "virtio-drivers",
+=======
+ "x86_64",
+>>>>>>> 5f7bf4f (chore: Update Depends for x86_64)
 ]
 
 [[package]]
@@ -866,6 +877,15 @@ checksum = "aa9c45b374136f52f2d6311062c7146bff20fec063c3f5d46a410bd937746955"
 [[package]]
 name = "rustversion"
 version = "1.0.22"
+<<<<<<< HEAD
+=======
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
+
+[[package]]
+name = "safe-mmio"
+version = "0.2.6"
+>>>>>>> 2662561 (chore: Update Depends for x86_64)
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
@@ -1009,6 +1029,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "static_cell"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1019,6 +1040,8 @@ dependencies = [
 >>>>>>> e3c3c05 (chore: seperate deps for target arch)
 
 [[package]]
+=======
+>>>>>>> 5f7bf4f (chore: Update Depends for x86_64)
 name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1143,6 +1166,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1162,6 +1186,12 @@ dependencies = [
  "thiserror",
  "zerocopy",
 ]
+=======
+name = "volatile"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
+>>>>>>> 5f7bf4f (chore: Update Depends for x86_64)
 
 [[package]]
 name = "wasi"
@@ -1322,6 +1352,19 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
+]
+
+[[package]]
+name = "x86_64"
+version = "0.15.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7841fa0098ceb15c567d93d3fae292c49e10a7662b4936d5f6a9728594555ba"
+dependencies = [
+ "bit_field",
+ "bitflags",
+ "const_fn",
+ "rustversion",
+ "volatile",
 ]
 
 [[package]]
