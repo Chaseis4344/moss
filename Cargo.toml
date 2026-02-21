@@ -25,7 +25,6 @@ bench = false
 [dependencies]
 libkernel = { path = "libkernel", features = ["all"] }
 moss-macros = { path = "moss-macros" }
-
 aarch64-cpu = "11.1.0"
 arm-pl011-uart = { version = "0.5.0", default-features = false }
 arm_pl031 = { version = "0.2.1", default-features = false }
@@ -33,6 +32,10 @@ async-trait = { workspace = true }
 bitflags = { workspace = true }
 blake2 = { version = "0.10.6", default-features = false }
 chacha20 = { version = "0.10.0", default-features = false, features = ["rng"] }
+linked_list_allocator = "0.10.5"
+static_cell = "2.1.0"
+tock-registers = "0.10.1"
+log = "0.4.27"
 fdt-parser = "0.4.16"
 futures = { version = "0.3.31", default-features = false, features = ["alloc", "async-await"] }
 getargs = { version = "0.5.0", default-features = false }
@@ -54,6 +57,13 @@ time = { version = "0.3.47", features = ["formatting", "macros"] } # For build t
 default = ["smp"]
 # Support for Symmetric Multiprocessing
 smp = []
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu = "11.1.0"
+arm-pl011-uart = { version = "0.3.1", default-features = false }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+acpi = "6.0.1"
 
 [profile.release]
 debug = "full"
