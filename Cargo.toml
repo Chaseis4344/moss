@@ -36,11 +36,6 @@ rustc-hash = { version = "2.1", default-features = false }
 [build-dependencies]
 time = { version = "0.3.47", features = ["formatting", "macros"] } # For build timestamping via build.rs
 
-[features]
-default = ["smp"]
-# Support for Symmetric Multiprocessing
-smp = []
-
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11.1.0"
 arm-pl011-uart = { version = "0.3.1", default-features = false }
@@ -48,6 +43,11 @@ arm-pl011-uart = { version = "0.3.1", default-features = false }
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 acpi = "6.0.1"
 x86_64 = { version = "0.15.4", features = ["nightly", "instructions"]}
+
+[features]
+default = ["smp"]
+# Support for Symmetric Multiprocessing
+smp = []
 
 [profile.release]
 strip = true

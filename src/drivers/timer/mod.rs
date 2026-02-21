@@ -10,8 +10,6 @@ use core::{
     time::Duration,
 };
 
-use super::Driver;
-
 #[cfg(target_arch = "aarch64")]
 pub mod armv8_arch;
 
