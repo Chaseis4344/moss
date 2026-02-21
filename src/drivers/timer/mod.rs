@@ -12,6 +12,16 @@ use core::{
     time::Duration,
 };
 
+use alloc::{collections::binary_heap::BinaryHeap, sync::Arc};
+
+use crate::{
+    interrupts::{InterruptDescriptor, InterruptHandler},
+    sync::{OnceLock, SpinLock},
+};
+
+use super::Driver;
+
+#[cfg(target_arch = "aarch64")]
 pub mod armv8_arch;
 
 const USER_HZ: u64 = 100;
