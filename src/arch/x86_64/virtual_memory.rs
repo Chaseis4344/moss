@@ -34,19 +34,12 @@ unsafe impl GlobalAlloc for SpinlockHeap {
 
 pub struct X86ArchProccessAddressSpace {}
 pub struct X86ArchKernAddressSpace {}
-
 impl VirtualMemory for X86_64 {
 
 // Need to be defined at some point
  type PageTableRoot = PageTable;
  type ProcessAddressSpace = X86ArchProccessAddressSpace;
  type KernelAddressSpace = X86ArchKernAddressSpace;
-impl VirtualMemory for X86_64 {
-
-// Need to be defined at some point
- type PageTableRoot = /* Type */ ;
- type ProcessAddressSpace = /* Type */;
- type KernelAddressSpace = /* Type */;
  const PAGE_OFFSET: usize = 42;
 
  fn kern_address_space() -> &'static SpinLockIrq<<Self as VirtualMemory>::KernelAddressSpace, Self> { 
@@ -106,6 +99,8 @@ impl UserAddressSpace for X86ArchProccessAddressSpace {
 
 }
 
+
+
 impl KernAddressSpace for X86ArchKernAddressSpace {
 
         fn map_mmio(&mut self, region: libkernel::memory::region::PhysMemoryRegion) -> libkernel::error::Result<libkernel::memory::address::VA> {
@@ -119,6 +114,4 @@ impl KernAddressSpace for X86ArchKernAddressSpace {
             ) -> libkernel::error::Result<()> {
             todo!()
         }
-} 
-=======
->>>>>>> hex-sun-upstream
+    } 

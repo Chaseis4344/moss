@@ -1,10 +1,7 @@
-
 ENTRY(start)
 
 SECTIONS {
-
   /* Based on Phil Opperman's Rust Kernel multi-boot scripts */
-<<<<<<< HEAD
     . = 2M;
     . = ALIGN(8);
 
@@ -22,4 +19,5 @@ SECTIONS {
     .bss : {
       *(COMMON)
       *(.bss .bss.*)
+    }
 }

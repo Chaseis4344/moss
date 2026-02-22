@@ -16,8 +16,8 @@ long_mode_start:
     # print `OKAY` to screen
     mov rax, 0x2f592f412f4b2f4f
     mov qword ptr [0xb8000], rax
-    .extern arch_stage_2
-    call arch_stage_2
+    .extern arch_stage_3
+    call arch_stage_3
 
     
     hlt

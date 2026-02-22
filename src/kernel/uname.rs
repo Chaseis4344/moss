@@ -4,13 +4,9 @@ use crate::{
     memory::uaccess::{UserCopyable, copy_to_user},
 };
 use alloc::ffi::CString;
-<<<<<<< HEAD
 use core::{ffi::c_char, mem::{self, transmute}};
-=======
 use core::ffi::CStr;
-use core::ffi::c_char;
 use core::str::FromStr;
->>>>>>> hex-sun-upstream
 use libkernel::{error::Result, memory::address::TUA};
 
 const SYSNAME: &CStr = c"Moss";

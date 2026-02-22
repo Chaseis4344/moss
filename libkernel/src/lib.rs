@@ -1,4 +1,5 @@
 #![cfg_attr(not(test), no_std)]
+#![feature(ptr_as_ref_unchecked)]
 
 use alloc::vec::Vec;
 use error::Result;

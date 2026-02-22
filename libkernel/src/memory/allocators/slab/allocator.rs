@@ -93,7 +93,10 @@ impl<CPU: CpuOps, A: PageAllocGetter<CPU>, T: AddressTranslator<()>> SlabManager
             // SAFETY: We hold a mutable reference for self, therefore we can be
             // sure that we have exclusive access to all Frames owned by this
             // SlabAllocInner.
-            unsafe { self.frame_list.get_frame(x.pfn).as_mut_unchecked() }
+            unsafe {
+                self.frame_list.get_frame(x.pfn).as_mut_unchecked() 
+            }
+
         }) && let FrameState::Slab(ref mut slab) = frame.state
             && let Some(ptr) = slab.alloc_object()
         {

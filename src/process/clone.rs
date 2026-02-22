@@ -65,7 +65,6 @@ pub async fn sys_clone(
         let current_task = current_task();
 
         let mut user_ctx = *current_task.ctx.user();
-<<<<<<< HEAD
         
         //
         // TODO: Make this arch indepdenant. The child returns '0' on clone.
@@ -77,11 +76,6 @@ pub async fn sys_clone(
         {
             user_ctx.x[0] = 0;
         }
-=======
-
-        // TODO: Make this arch independent. The child returns '0' on clone.
-        user_ctx.x[0] = 0;
->>>>>>> hex-sun-upstream
 
         //This may be a Thread location String, which is why it is being used as a stack pointer
         //This should be rengineered eventually such that the kernel has it's own tiny VM for stack
