@@ -6,10 +6,6 @@ fn main() {
     let linker_script = match std::env::var("CARGO_CFG_TARGET_ARCH") {
         Ok(arch) if arch == "aarch64" => PathBuf::from("./src/arch/arm64/boot/linker.ld"),
         Ok(arch) if arch == "x86_64" => {
-            println!("cargo::rustc-link-arg=--nmagic");
-            println!("cargo::rustc-link-arg=--no-gc-sections");
-            println!("cargo::rustc-link-arg=--no-dynamic-linker");
-            println!("cargo::rustc-link-arg=--no-pie");
             PathBuf::from("./src/arch/x86_64/boot/linker.ld")
         },
         Ok(arch) => {

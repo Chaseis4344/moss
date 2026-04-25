@@ -1,7 +1,5 @@
-use core::ops::Deref;
-
 use super::{
-    Comm, Task, TaskState, Tid,
+    Comm, ITimers, Task, Tid,
     creds::Credentials,
     ctx::{Context, UserCtx},
     fd_table::FileDescriptorTable,
@@ -9,34 +7,31 @@ use super::{
     thread_group::{
         Tgid,
         builder::ThreadGroupBuilder,
-        signal::{SigId, SigSet, SignalActionState},
+        signal::{AtomicSigSet, SignalActionState},
     },
     threading::RobustListHead,
 };
-use crate::drivers::timer::{Instant, now};
+use crate::{arch::Arch, fs::DummyInode, sync::SpinLock};
 use crate::{
-    arch::{Arch, ArchImpl},
-    fs::DummyInode,
-    kernel::cpu_id::CpuId,
-    sync::SpinLock,
+    arch::ArchImpl,
+    drivers::timer::{Instant, now},
 };
 use alloc::sync::Arc;
+use core::ops::Deref;
 use core::sync::atomic::AtomicUsize;
 use libkernel::{
-    VirtualMemory,
     fs::pathbuf::PathBuf,
     memory::{
         address::{TUA, VA},
-        proc_vm::{ProcessVM, vmarea::VMArea},
+        proc_vm::{ProcessVM, address_space::VirtualMemory, vmarea::VMArea},
     },
+    sync::waker_set::WakerSet,
 };
 
 /// Task state which is exclusively owned by this CPU/runqueue, it is not shared
 /// between other tasks and can therefore be access lock-free.
 pub struct OwnedTask {
     pub ctx: Context,
-    pub sig_mask: SigSet,
-    pub pending_signals: SigSet,
     pub priority: Option<i8>,
     pub robust_list: Option<TUA<RobustListHead>>,
     pub child_tid_ptr: Option<TUA<u32>>,
@@ -72,24 +67,24 @@ impl OwnedTask {
             tid: Tid::idle_for_cpu(),
             comm: Arc::new(SpinLock::new(Comm::new("idle"))),
             process: thread_group_builder.build(),
-            state: Arc::new(SpinLock::new(TaskState::Runnable)),
             cwd: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             root: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             creds: SpinLock::new(Credentials::new_root()),
             vm: Arc::new(SpinLock::new(vm)),
             fd_table: Arc::new(SpinLock::new(FileDescriptorTable::new())),
-            last_cpu: SpinLock::new(CpuId::this()),
+            i_timers: SpinLock::new(ITimers::default()),
             ptrace: SpinLock::new(PTrace::new()),
             utime: AtomicUsize::new(0),
             stime: AtomicUsize::new(0),
             last_account: AtomicUsize::new(0),
+            pending_signals: AtomicSigSet::empty(),
+            signal_notifier: SpinLock::new(WakerSet::new()),
+            sig_mask: AtomicSigSet::empty(),
         };
 
         Self {
             priority: Some(i8::MIN),
             ctx: Context::from_user_ctx(user_ctx),
-            sig_mask: SigSet::empty(),
-            pending_signals: SigSet::empty(),
             robust_list: None,
             child_tid_ptr: None,
             t_shared: Arc::new(task),
@@ -102,24 +97,24 @@ impl OwnedTask {
             tid: Tid(1),
             comm: Arc::new(SpinLock::new(Comm::new("init"))),
             process: ThreadGroupBuilder::new(Tgid::init()).build(),
-            state: Arc::new(SpinLock::new(TaskState::Runnable)),
             cwd: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             root: Arc::new(SpinLock::new((Arc::new(DummyInode {}), PathBuf::new()))),
             creds: SpinLock::new(Credentials::new_root()),
             vm: Arc::new(SpinLock::new(
                 ProcessVM::empty().expect("Could not create init process's VM"),
             )),
+            i_timers: SpinLock::new(ITimers::default()),
             fd_table: Arc::new(SpinLock::new(FileDescriptorTable::new())),
-            last_cpu: SpinLock::new(CpuId::this()),
             ptrace: SpinLock::new(PTrace::new()),
             last_account: AtomicUsize::new(0),
             utime: AtomicUsize::new(0),
             stime: AtomicUsize::new(0),
+            pending_signals: AtomicSigSet::empty(),
+            signal_notifier: SpinLock::new(WakerSet::new()),
+            sig_mask: AtomicSigSet::empty(),
         };
 
         Self {
-            pending_signals: SigSet::empty(),
-            sig_mask: SigSet::empty(),
             priority: None,
             ctx: Context::from_user_ctx(<ArchImpl as Arch>::new_user_context(
                 VA::null(),
@@ -139,32 +134,6 @@ impl OwnedTask {
 
     pub fn set_priority(&mut self, priority: i8) {
         self.priority = Some(priority);
-    }
-
-    pub fn raise_task_signal(&mut self, signal: SigId) {
-        self.pending_signals.insert(signal.into());
-    }
-
-    /// Take a pending signal from this task's pending signal queue, or the
-    /// process's pending signal queue, while repsecting the signal mask.
-    pub fn take_signal(&mut self) -> Option<SigId> {
-        self.pending_signals.take_signal(self.sig_mask).or_else(|| {
-            self.process
-                .pending_signals
-                .lock_save_irq()
-                .take_signal(self.sig_mask)
-        })
-    }
-
-    /// Check for a pending signal from this task's pending signal queue, or the
-    /// process's pending signal queue, while repsecting the signal mask.
-    pub fn peek_signal(&self) -> Option<SigId> {
-        self.pending_signals.peek_signal(self.sig_mask).or_else(|| {
-            self.process
-                .pending_signals
-                .lock_save_irq()
-                .peek_signal(self.sig_mask)
-        })
     }
 
     pub fn update_accounting(&self, curr_time: Option<Instant>) {

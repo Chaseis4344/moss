@@ -6,6 +6,7 @@
 rust-project.json
 .idea/
 error.log
+.vscode/
 ext4_mount/
 rust-project.json
 cargo.lock

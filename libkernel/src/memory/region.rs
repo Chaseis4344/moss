@@ -1,4 +1,4 @@
-//! `region` module: Contiguous memory regions.
+//! Contiguous memory regions.
 //!
 //! This module defines `MemoryRegion<T>`, a generic abstraction for handling
 //! ranges of memory in both physical and virtual address spaces.
@@ -28,8 +28,6 @@
 //!
 //! let mapped = region.map_via::<IdentityTranslator>();
 //! ```
-
-use crate::memory::PAGE_MASK;
 
 use super::{
     PAGE_SHIFT, PAGE_SIZE,
@@ -253,8 +251,9 @@ impl<T: MemKind> MemoryRegion<T> {
     }
 
     /// Increases the capacity of the region by size bytes.
+    #[cfg(feature = "proc_vm")]
     pub(crate) fn expand_by(&mut self, size: usize) {
-        assert!(size & PAGE_MASK == 0);
+        assert!(size & crate::memory::PAGE_MASK == 0);
 
         self.size += size;
     }
@@ -383,6 +382,7 @@ impl PhysMemoryRegion {
         VirtMemoryRegion::new(self.address.to_va::<T>(), self.size)
     }
 
+    /// Returns an iterator over the page frame numbers in this region.
     pub fn iter_pfns(self) -> impl Iterator<Item = PageFrame> {
         let mut count = 0;
         let pages_count = self.size >> PAGE_SHIFT;

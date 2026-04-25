@@ -1,3 +1,5 @@
+//! In-memory temporary filesystem (tmpfs).
+
 use crate::{
     CpuOps,
     error::{FsError, KernelError, Result},
@@ -11,7 +13,7 @@ use crate::{
         PAGE_SIZE,
         address::{AddressTranslator, VA},
         allocators::phys::PageAllocGetter,
-        page::ClaimedPage,
+        claimed_page::ClaimedPage,
     },
     sync::spinlock::SpinLockIrq,
 };
@@ -23,6 +25,8 @@ use alloc::{
     vec::Vec,
 };
 use async_trait::async_trait;
+use core::any::Any;
+use core::time::Duration;
 use core::{
     cmp::min,
     marker::PhantomData,
@@ -126,14 +130,14 @@ where
     G: PageAllocGetter<C>,
     T: AddressTranslator<()>,
 {
-    fn new(id: InodeId, mode: FilePermissions) -> Result<Self> {
+    fn new(id: InodeId, permissions: FilePermissions) -> Result<Self> {
         Ok(Self {
             id,
             attr: SpinLockIrq::new(FileAttr {
                 file_type: FileType::File,
                 size: 0,
                 nlinks: 1,
-                mode,
+                permissions,
                 ..Default::default()
             }),
             inner: SpinLockIrq::new(TmpFsRegInner {
@@ -324,6 +328,10 @@ where
         *self.attr.lock_save_irq() = attr;
         Ok(())
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 struct TmpFsDirEnt {
@@ -423,6 +431,7 @@ where
         name: &str,
         file_type: FileType,
         mode: FilePermissions,
+        _time: Option<Duration>,
     ) -> Result<Arc<dyn Inode>> {
         let mut entries = self.entries.lock_save_irq();
 
@@ -658,6 +667,10 @@ where
     fn dir_is_empty(&self) -> Result<bool> {
         Ok(self.entries.lock_save_irq().is_empty())
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl<C, G, T> TmpFsDirInode<C, G, T>
@@ -666,14 +679,14 @@ where
     G: PageAllocGetter<C>,
     T: AddressTranslator<()>,
 {
-    pub fn new(id: u64, fs: Weak<TmpFs<C, G, T>>, mode: FilePermissions) -> Arc<Self> {
+    pub fn new(id: u64, fs: Weak<TmpFs<C, G, T>>, permissions: FilePermissions) -> Arc<Self> {
         Arc::new_cyclic(|weak_this| Self {
             entries: SpinLockIrq::new(Vec::new()),
             attrs: SpinLockIrq::new(FileAttr {
                 size: 0,
                 file_type: FileType::Directory,
                 block_size: BLOCK_SZ as _,
-                mode,
+                permissions,
                 ..Default::default()
             }),
             id,
@@ -750,6 +763,10 @@ impl<C: CpuOps> Inode for TmpFsSymlinkInode<C> {
             Ok(())
         }
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl<C: CpuOps> TmpFsSymlinkInode<C> {
@@ -768,6 +785,7 @@ impl<C: CpuOps> TmpFsSymlinkInode<C> {
     }
 }
 
+/// An in-memory temporary filesystem backed by page allocations.
 pub struct TmpFs<C, G, T>
 where
     C: CpuOps,
@@ -787,6 +805,7 @@ where
     G: PageAllocGetter<C>,
     T: AddressTranslator<()>,
 {
+    /// Creates a new tmpfs instance with the given filesystem ID.
     pub fn new(fs_id: u64) -> Arc<Self> {
         Arc::new_cyclic(|weak_fs| {
             let root =
@@ -802,6 +821,7 @@ where
         })
     }
 
+    /// Allocates the next unique inode ID for this filesystem.
     pub fn alloc_inode_id(&self) -> u64 {
         self.next_inode_id.fetch_add(1, Ordering::Relaxed)
     }
@@ -988,6 +1008,7 @@ mod tests {
                 "test_file.txt",
                 FileType::File,
                 FilePermissions::from_bits_retain(0),
+                None,
             )
             .await
             .expect("Create failed");
@@ -1006,12 +1027,17 @@ mod tests {
         let fs = setup_fs();
         let root = fs.root_inode().await.unwrap();
 
-        root.create("dup", FileType::File, FilePermissions::from_bits_retain(0))
-            .await
-            .unwrap();
+        root.create(
+            "dup",
+            FileType::File,
+            FilePermissions::from_bits_retain(0),
+            None,
+        )
+        .await
+        .unwrap();
 
         let res = root
-            .create("dup", FileType::File, FilePermissions::empty())
+            .create("dup", FileType::File, FilePermissions::empty(), None)
             .await;
         assert!(res.is_err(), "Should not allow duplicate file creation");
     }
@@ -1023,13 +1049,18 @@ mod tests {
 
         // Create /subdir
         let subdir = root
-            .create("subdir", FileType::Directory, FilePermissions::empty())
+            .create(
+                "subdir",
+                FileType::Directory,
+                FilePermissions::empty(),
+                None,
+            )
             .await
             .unwrap();
 
         // Create /subdir/inner
         let inner = subdir
-            .create("inner", FileType::File, FilePermissions::empty())
+            .create("inner", FileType::File, FilePermissions::empty(), None)
             .await
             .unwrap();
 
@@ -1045,13 +1076,13 @@ mod tests {
         let root = fs.root_inode().await.unwrap();
 
         // Create files in "random" order
-        root.create("c.txt", FileType::File, FilePermissions::empty())
+        root.create("c.txt", FileType::File, FilePermissions::empty(), None)
             .await
             .unwrap();
-        root.create("a.txt", FileType::File, FilePermissions::empty())
+        root.create("a.txt", FileType::File, FilePermissions::empty(), None)
             .await
             .unwrap();
-        root.create("b.dir", FileType::Directory, FilePermissions::empty())
+        root.create("b.dir", FileType::Directory, FilePermissions::empty(), None)
             .await
             .unwrap();
 
@@ -1076,11 +1107,11 @@ mod tests {
         let root = fs.root_inode().await.unwrap();
 
         let f1 = root
-            .create("f1", FileType::File, FilePermissions::empty())
+            .create("f1", FileType::File, FilePermissions::empty(), None)
             .await
             .unwrap();
         let f2 = root
-            .create("f2", FileType::File, FilePermissions::empty())
+            .create("f2", FileType::File, FilePermissions::empty(), None)
             .await
             .unwrap();
 

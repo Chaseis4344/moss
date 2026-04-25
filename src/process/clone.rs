@@ -1,11 +1,16 @@
 use super::owned::OwnedTask;
 use super::ptrace::{PTrace, TracePoint, ptrace_stop};
-use super::{ctx::Context, thread_group::signal::SigSet};
-use crate::kernel::cpu_id::CpuId;
+use super::{ITimers, Tid};
+use super::{
+    ctx::Context,
+    thread_group::signal::{AtomicSigSet, SigSet},
+};
 use crate::memory::uaccess::copy_to_user;
+use crate::sched::sched_task::Work;
+use crate::sched::syscall_ctx::ProcessCtx;
 use crate::{
-    process::{TASK_LIST, Task, TaskState},
-    sched::{self, current::current_task},
+    process::{TASK_LIST, Task},
+    sched::{self},
     sync::SpinLock,
 };
 use alloc::boxed::Box;
@@ -15,6 +20,7 @@ use libkernel::memory::address::TUA;
 use libkernel::{
     error::{KernelError, Result},
     memory::address::UA,
+    sync::waker_set::WakerSet,
 };
 use ringbuf::Arc;
 
@@ -49,6 +55,7 @@ bitflags! {
 }
 
 pub async fn sys_clone(
+    ctx: &ProcessCtx,
     flags: u32,
     newsp: UA,
     parent_tidptr: TUA<u32>,
@@ -57,12 +64,20 @@ pub async fn sys_clone(
 ) -> Result<usize> {
     let flags = CloneFlags::from_bits_truncate(flags);
 
+    let trace_point = if flags.contains(CloneFlags::CLONE_THREAD) {
+        TracePoint::Clone
+    } else {
+        TracePoint::Fork
+    };
+
     // TODO: differentiate between `TracePoint::Fork`, `TracePoint::Clone` and
     // `TracePoint::VFork`.
-    let should_trace_new_tsk = ptrace_stop(TracePoint::Fork).await;
+    let should_trace_new_tsk = ptrace_stop(ctx, trace_point).await;
 
     let new_task = {
-        let current_task = current_task();
+        let tid = Tid::next_tid();
+
+        let current_task = ctx.task();
 
         let mut user_ctx = *current_task.ctx.user();
         
@@ -90,7 +105,7 @@ pub async fn sys_clone(
             user_ctx.tpid_el0 = tls as _;
         }
 
-        let (tg, tid) = if flags.contains(CloneFlags::CLONE_THREAD) {
+        let tg = if flags.contains(CloneFlags::CLONE_THREAD) {
             if !flags.contains(CloneFlags::CLONE_SIGHAND & CloneFlags::CLONE_VM) {
                 // CLONE_THREAD requires both CLONE_SIGHAND and CLONE_VM to be
                 // set.
@@ -101,6 +116,9 @@ pub async fn sys_clone(
             // implementations will be required to implement whatever is done here properly, and avoid
             // arm-dependent code
             //This redirects the arm64 main stack pointer (el0) to a new stack pointer in 
+            //
+            //NOTE: This will likely require a new abstraction to a type of "stack pointer" type or
+            //other way to record registers
             #[cfg(target_arch = "aarch64")]
             {
                 user_ctx.sp_el0 = newsp.value() as _;
@@ -110,6 +128,10 @@ pub async fn sys_clone(
                 current_task.process.clone(),
                 current_task.process.next_tid(),
             )
+            user_ctx.sp_el0 = newsp.value() as _;
+
+            // A new task within this thread group.
+            current_task.process.clone()
         } else {
             let tgid_parent = if flags.contains(CloneFlags::CLONE_PARENT) {
                 // Use the parent's parent as the new parent.
@@ -126,7 +148,7 @@ pub async fn sys_clone(
                 current_task.process.clone()
             };
 
-            tgid_parent.new_child(flags.contains(CloneFlags::CLONE_SIGHAND))
+            tgid_parent.new_child(flags.contains(CloneFlags::CLONE_SIGHAND), tid)
         };
 
         let vm = if flags.contains(CloneFlags::CLONE_VM) {
@@ -163,20 +185,20 @@ pub async fn sys_clone(
 
         let creds = current_task.creds.lock_save_irq().clone();
 
-        let new_sigmask = current_task.sig_mask;
+        let new_sigmask = AtomicSigSet::new(current_task.sig_mask.load());
+
+        let initial_signals = if should_trace_new_tsk {
+            // When we want to trace a new task through one of
+            // PTRACE_O_TRACE{FORK,VFORK,CLONE}, stop the child as soon as
+            // it is created.
+            AtomicSigSet::new(SigSet::SIGSTOP)
+        } else {
+            AtomicSigSet::empty()
+        };
 
         OwnedTask {
             ctx: Context::from_user_ctx(user_ctx),
             priority: current_task.priority,
-            sig_mask: new_sigmask,
-            pending_signals: if should_trace_new_tsk {
-                // When we want to trace a new task through one of
-                // PTRACE_O_TRACE{FORK,VFORK,CLONE}, stop the child as soon as
-                // it is created.
-                SigSet::SIGSTOP
-            } else {
-                SigSet::empty()
-            },
             robust_list: None,
             child_tid_ptr: if !child_tidptr.is_null() {
                 Some(child_tidptr)
@@ -191,10 +213,12 @@ pub async fn sys_clone(
                 fd_table: files,
                 cwd,
                 root,
+                i_timers: SpinLock::new(ITimers::default()),
                 creds: SpinLock::new(creds),
-                state: Arc::new(SpinLock::new(TaskState::Runnable)),
-                last_cpu: SpinLock::new(CpuId::this()),
                 ptrace: SpinLock::new(ptrace),
+                sig_mask: new_sigmask,
+                pending_signals: initial_signals,
+                signal_notifier: SpinLock::new(WakerSet::new()),
                 utime: AtomicUsize::new(0),
                 stime: AtomicUsize::new(0),
                 last_account: AtomicUsize::new(0),
@@ -203,28 +227,29 @@ pub async fn sys_clone(
         }
     };
 
-    let tid = new_task.tid;
+    let desc = new_task.descriptor();
+    let work = Work::new(Box::new(new_task));
 
     TASK_LIST
         .lock_save_irq()
-        .insert(new_task.descriptor(), Arc::downgrade(&new_task.t_shared));
+        .insert(desc.tid(), Arc::downgrade(&work));
 
-    new_task
-        .process
+    work.process
         .tasks
         .lock_save_irq()
-        .insert(tid, Arc::downgrade(&new_task.t_shared));
+        .insert(desc.tid, Arc::downgrade(&work));
 
-    sched::insert_task_cross_cpu(Box::new(new_task));
+    sched::insert_work_cross_cpu(work);
+
     NUM_FORKS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 
     // Honour CLONE_*SETTID semantics for the parent and (shared-VM) child.
     if flags.contains(CloneFlags::CLONE_PARENT_SETTID) && !parent_tidptr.is_null() {
-        copy_to_user(parent_tidptr, tid.value()).await?;
+        copy_to_user(parent_tidptr, desc.tid.value()).await?;
     }
     if flags.contains(CloneFlags::CLONE_CHILD_SETTID) && !child_tidptr.is_null() {
-        copy_to_user(child_tidptr, tid.value()).await?;
+        copy_to_user(child_tidptr, desc.tid.value()).await?;
     }
 
-    Ok(tid.value() as _)
+    Ok(desc.tid.value() as _)
 }

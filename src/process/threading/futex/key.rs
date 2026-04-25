@@ -1,7 +1,7 @@
-use crate::sched::current::current_task;
-use libkernel::UserAddressSpace;
+use crate::sched::syscall_ctx::ProcessCtx;
 use libkernel::error::{KernelError, Result};
 use libkernel::memory::address::{TUA, VA};
+use libkernel::memory::proc_vm::address_space::UserAddressSpace;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum FutexKey {
@@ -10,8 +10,8 @@ pub enum FutexKey {
 }
 
 impl FutexKey {
-    pub fn new_private(uaddr: TUA<u32>) -> Self {
-        let pid = current_task().process.tgid.value();
+    pub fn new_private(ctx: &ProcessCtx, uaddr: TUA<u32>) -> Self {
+        let pid = ctx.shared().process.tgid.value();
 
         Self::Private {
             pid,
@@ -19,8 +19,9 @@ impl FutexKey {
         }
     }
 
-    pub fn new_shared(uaddr: TUA<u32>) -> Result<Self> {
-        let pg_info = current_task()
+    pub fn new_shared(ctx: &ProcessCtx, uaddr: TUA<u32>) -> Result<Self> {
+        let pg_info = ctx
+            .shared()
             .vm
             .lock_save_irq()
             .mm_mut()

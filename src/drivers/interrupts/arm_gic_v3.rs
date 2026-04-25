@@ -16,10 +16,10 @@ use aarch64_cpu::registers::MPIDR_EL1;
 use alloc::{boxed::Box, sync::Arc};
 use core::arch::asm;
 use libkernel::{
-    KernAddressSpace, VirtualMemory,
     error::{KernelError, Result},
     memory::{
         address::{PA, VA},
+        proc_vm::address_space::{KernAddressSpace, VirtualMemory},
         region::PhysMemoryRegion,
     },
 };
@@ -491,7 +491,7 @@ pub fn gic_v3_probe(_dm: &mut DriverManager, d: DeviceDescriptor) -> Result<Arc<
             let mut gic = ArmGicV3::new(dist_mem, rdist_mem, rdist_stride)?;
 
             if let Err(e) = gic.init_core(0) {
-                panic!("Failed to initialize GICv3 for boot core: {:?}", e);
+                panic!("Failed to initialize GICv3 for boot core: {e:?}");
             }
 
             let gic = Arc::new(SpinLock::new(gic));

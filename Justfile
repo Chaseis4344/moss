@@ -9,7 +9,7 @@ run:
     if [ ! -f moss.img ]; then
     just create-image
     fi
-    cargo run --release -- /bin/ash
+    cargo run --release -- --init /bin/ash
 
 test-unit:
     #!/usr/bin/env sh
@@ -20,4 +20,4 @@ test-kunit:
     cargo test --release
 
 test-userspace:
-    cargo run -r -- /bin/usertest
+    cargo run -r -- --init /bin/usertest

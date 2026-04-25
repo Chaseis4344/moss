@@ -15,6 +15,7 @@ use crate::{
     memory::PAGE_ALLOC,
     sync::OnceLock,
 };
+use aarch64_cpu::asm::barrier::{SY, isb};
 use core::{
     arch::naked_asm,
     hint::spin_loop,
@@ -23,11 +24,12 @@ use core::{
     time::Duration,
 };
 use libkernel::{
-    CpuOps, KernAddressSpace, VirtualMemory,
+    CpuOps,
     error::{KernelError, Result},
     memory::{
         address::{PA, VA},
-        permissions::PtePermissions,
+        paging::permissions::PtePermissions,
+        proc_vm::address_space::{KernAddressSpace, VirtualMemory},
     },
 };
 use log::{info, warn};
@@ -140,6 +142,8 @@ fn prepare_for_secondary_entry() -> Result<(PA, PA)> {
         // MMU enabled (and therefore caches), we can't reply on the CCI.
         // Therefore, manually flush the boot context to RAM.
         flush_to_ram(boot_ctx);
+
+        isb(SY);
     };
 
     Ok((entry_fn, ctx))

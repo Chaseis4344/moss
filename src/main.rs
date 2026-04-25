@@ -3,8 +3,8 @@
 #![feature(used_with_arg)]
 #![feature(likely_unlikely)]
 #![feature(box_as_ptr)]
-#![expect(internal_features)]
-#![feature(core_intrinsics)]
+#![allow(internal_features)]
+#![cfg_attr(test, feature(core_intrinsics))]
 #![feature(custom_test_frameworks)]
 #![reexport_test_harness_main = "test_main"]
 #![test_runner(crate::testing::test_runner)]
@@ -21,20 +21,21 @@ use drivers::{fdt_prober::get_fdt, fs::register_fs_drivers};
 use fs::VFS;
 use getargs::{Opt, Options};
 use libkernel::{
-    CpuOps, VirtualMemory,
+    CpuOps,
     fs::{
         BlockDevice, OpenFlags, attr::FilePermissions, blk::ramdisk::RamdiskBlkDev, path::Path,
         pathbuf::PathBuf,
     },
     memory::{
         address::{PA, VA},
+        proc_vm::address_space::VirtualMemory,
         region::PhysMemoryRegion,
     },
 };
 use log::{error, warn};
 use process::ctx::UserCtx;
 use sched::{
-    current::current_task_shared, sched_init, spawn_kernel_work, uspc_ret::dispatch_userspace_task,
+    sched_init, spawn_kernel_work, syscall_ctx::ProcessCtx, uspc_ret::dispatch_userspace_task,
 };
 
 extern crate alloc;
@@ -48,6 +49,7 @@ mod fs;
 mod interrupts;
 mod kernel;
 mod memory;
+mod net;
 mod process;
 mod sched;
 mod sync;
@@ -75,7 +77,7 @@ fn on_panic(info: &PanicInfo) -> ! {
     ArchImpl::power_off();
 }
 
-async fn launch_init(mut opts: KOptions) {
+async fn launch_init(mut ctx: ProcessCtx, mut opts: KOptions) {
     let init = opts
         .init
         .unwrap_or_else(|| panic!("No init specified in kernel command line"));
@@ -108,13 +110,20 @@ async fn launch_init(mut opts: KOptions) {
         None
     };
 
+    // Set time to rtc time if possible
+    if let Some(rtc) = drivers::rtc::get_rtc()
+        && let Some(time) = rtc.time()
+    {
+        clock::realtime::set_date(time);
+    }
+
     let root_fs = opts
         .root_fs
         .unwrap_or_else(|| panic!("No root FS driver specified in kernel command line"));
 
     VFS.mount_root(&root_fs, initrd_block_dev)
         .await
-        .unwrap_or_else(|e| panic!("Failed to mount root FS: {}", e));
+        .unwrap_or_else(|e| panic!("Failed to mount root FS: {e}"));
 
     // Process all automounts.
     for (path, fs) in opts.automounts.iter() {
@@ -133,7 +142,7 @@ async fn launch_init(mut opts: KOptions) {
         .await
         .expect("Unable to find init");
 
-    let task = current_task_shared();
+    let task = ctx.shared().clone();
 
     // Ensure that the exec() call applies to init.
     assert!(task.process.tgid.is_init());
@@ -178,7 +187,7 @@ async fn launch_init(mut opts: KOptions) {
 
     init_args.append(&mut opts.init_args);
 
-    process::exec::kernel_exec(init.as_path(), inode, init_args, vec![])
+    process::exec::kernel_exec(&mut ctx, init.as_path(), inode, init_args, vec![])
         .await
         .expect("Could not launch init process");
 }
@@ -230,7 +239,14 @@ pub fn kmain(args: String, ctx_frame: *mut UserCtx) {
 
     let kopts = parse_args(&args);
 
-    spawn_kernel_work(launch_init(kopts));
+    {
+        // SAFETY: kmain is called prior to init being launched. Thefore, we
+        // will be the only access to `ctx` at this point.
+        let mut ctx = unsafe { ProcessCtx::from_current() };
+        let ctx2 = unsafe { ctx.clone() };
+
+        spawn_kernel_work(&mut ctx, launch_init(ctx2, kopts));
+    }
 
     dispatch_userspace_task(ctx_frame);
 }

@@ -1,23 +1,27 @@
-use core::future::poll_fn;
-use core::task::{Poll, Waker};
-
-use crate::arch::{Arch, ArchImpl};
-use crate::fs::syscalls::iov::IoVec;
-use crate::memory::uaccess::{copy_from_user, copy_to_user};
-use crate::process::TASK_LIST;
-use crate::process::thread_group::signal::SigId;
-use crate::sched::current::{current_task, current_task_shared};
+use super::{
+    Task, Tid, find_task_by_tid,
+    thread_group::{ThreadGroup, pid::PidT, wait::TraceTrap},
+};
+use crate::{
+    arch::{Arch, ArchImpl},
+    fs::syscalls::iov::IoVec,
+    memory::uaccess::{copy_from_user, copy_to_user},
+    process::thread_group::signal::SigId,
+    sched::syscall_ctx::ProcessCtx,
+};
 use alloc::sync::Arc;
 use bitflags::Flags;
-use libkernel::error::{KernelError, Result};
-use libkernel::memory::address::UA;
+use core::{
+    future::poll_fn,
+    task::{Poll, Waker},
+};
+use libkernel::{
+    error::{KernelError, Result},
+    memory::address::UA,
+};
 use log::warn;
 
 type GpRegs = <ArchImpl as Arch>::PTraceGpRegs;
-
-use super::TaskState;
-use super::thread_group::ThreadGroup;
-use super::thread_group::wait::ChildState;
 
 const PTRACE_EVENT_FORK: usize = 1;
 const PTRACE_EVENT_VFORK: usize = 2;
@@ -43,7 +47,7 @@ bitflags::bitflags! {
         const PTRACE_O_SUSPEND_SECCOMP = 1 << 21;
     }
 
-    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Clone, Copy, PartialEq, Debug)]
     pub struct TracePoint: u32 {
         const SyscallEntry = 0x01;
         const SyscallExit  = 0x02;
@@ -123,13 +127,10 @@ impl PTrace {
             None => 0,
             Some(PTraceState::Running) => 0,
             // No masking for real signal delivery.
-            Some(PTraceState::SignalTrap { signal, .. }) => {
-                if signal.is_stopping() {
-                    (PTRACE_EVENT_STOP as i32) << 8
-                } else {
-                    0
-                }
+            Some(PTraceState::SignalTrap { signal, .. }) if signal.is_stopping() => {
+                (PTRACE_EVENT_STOP as i32) << 8
             }
+            Some(PTraceState::SignalTrap { .. }) => 0,
             Some(PTraceState::TracePointHit { hit_point, .. }) => match hit_point {
                 TracePoint::SyscallEntry | TracePoint::SyscallExit => {
                     if self.sysgood {
@@ -148,7 +149,7 @@ impl PTrace {
     }
 
     /// Notify parents of a trap event.
-    pub fn notify_tracer_of_trap(&self, me: &Arc<ThreadGroup>) {
+    pub fn notify_tracer_of_trap(&self, task: &Arc<Task>) {
         let Some(trap_signal) = (match self.state {
             // For non-signal trace events, we use SIGTRAP.
             Some(PTraceState::TracePointHit { hit_point, .. }) => match hit_point {
@@ -162,27 +163,18 @@ impl PTrace {
             return;
         };
 
-        // Notify the parent that we have stopped (SIGCHLD).
+        // Notify the tracer that we have stopped (SIGCHLD).
         if let Some(tracer) = self.tracer.as_ref() {
-            tracer.child_notifiers.child_update(
-                me.tgid,
-                ChildState::TraceTrap {
-                    signal: trap_signal,
-                    mask: self.calc_trace_point_mask(),
-                },
+            tracer.child_notifiers.ptrace_notify(
+                task.tid,
+                TraceTrap::new(trap_signal, self.calc_trace_point_mask()),
             );
 
-            tracer
-                .pending_signals
-                .lock_save_irq()
-                .set_signal(SigId::SIGCHLD);
+            tracer.queue_signal(SigId::SIGCHLD);
         }
     }
 
     pub fn set_waker(&mut self, waker: Waker) {
-        // Ensure we never override an already existing waker.
-        debug_assert!(self.waker.is_none());
-
         self.waker = Some(waker);
     }
 
@@ -260,24 +252,31 @@ impl TryFrom<i32> for PtraceOperation {
     }
 }
 
-pub async fn ptrace_stop(point: TracePoint) -> bool {
-    let task_sh = current_task_shared();
-    {
-        let mut ptrace = task_sh.ptrace.lock_save_irq();
-
-        if ptrace.hit_trace_point(point, current_task().ctx.user()) {
-            ptrace.notify_tracer_of_trap(&task_sh.process);
-        } else {
-            return false;
-        }
-    }
+pub async fn ptrace_stop(ctx: &ProcessCtx, point: TracePoint) -> bool {
+    let task_sh = ctx.shared();
+    let mut notified = false;
 
     poll_fn(|cx| {
         let mut ptrace = task_sh.ptrace.lock_save_irq();
 
-        if matches!(ptrace.state, Some(PTraceState::Running)) {
+        if !notified {
+            // First poll: hit the trace point, set waker, then notify.
+            // The waker must be set *before* notification so the tracer
+            // can always find it when it does PTRACE_SYSCALL/CONT.
+            if !ptrace.hit_trace_point(point, ctx.task().ctx.user()) {
+                return Poll::Ready(false);
+            }
+
+            notified = true;
+            ptrace.set_waker(cx.waker().clone());
+            ptrace.notify_tracer_of_trap(task_sh);
+            Poll::Pending
+        } else if matches!(ptrace.state, Some(PTraceState::Running)) {
+            // Tracer resumed us.
             Poll::Ready(true)
         } else {
+            // Re-polled (e.g. spurious wakeup from signal) but tracer
+            // hasn't resumed yet. Refresh the waker and go back to sleep.
             ptrace.set_waker(cx.waker().clone());
             Poll::Pending
         }
@@ -285,11 +284,11 @@ pub async fn ptrace_stop(point: TracePoint) -> bool {
     .await
 }
 
-pub async fn sys_ptrace(op: i32, pid: u64, addr: UA, data: UA) -> Result<usize> {
+pub async fn sys_ptrace(ctx: &ProcessCtx, op: i32, pid: PidT, addr: UA, data: UA) -> Result<usize> {
     let op = PtraceOperation::try_from(op)?;
 
     if op == PtraceOperation::TraceMe {
-        let current_task = current_task_shared();
+        let current_task = ctx.shared();
         let mut ptrace = current_task.ptrace.lock_save_irq();
 
         ptrace.state = Some(PTraceState::Running);
@@ -306,14 +305,7 @@ pub async fn sys_ptrace(op: i32, pid: u64, addr: UA, data: UA) -> Result<usize> 
         return Ok(0);
     }
 
-    let target_task = {
-        TASK_LIST
-            .lock_save_irq()
-            .iter()
-            .find(|(desc, _)| desc.tid.value() == pid as u32)
-            .and_then(|(_, task)| task.upgrade())
-            .ok_or(KernelError::NoProcess)?
-    };
+    let target_task = { find_task_by_tid(Tid::from_pid_t(pid)).ok_or(KernelError::NoProcess)? };
 
     // TODO: Check CAP_SYS_PTRACE & security
     match op {
@@ -384,7 +376,9 @@ pub async fn sys_ptrace(op: i32, pid: u64, addr: UA, data: UA) -> Result<usize> 
                 .break_points
                 .remove(TracePoint::SyscallEntry | TracePoint::SyscallExit);
 
-            *target_task.state.lock_save_irq() = TaskState::Runnable;
+            if let Some(waker) = ptrace.waker.take() {
+                waker.wake();
+            }
 
             Ok(0)
         }

@@ -2,7 +2,11 @@
 target = "x86_64-unknown-none"
 
 [target.aarch64-unknown-none-softfloat]
+<<<<<<< HEAD
 runner = "scripts/qemu-runner.sh"
 
 [target.x86_64-unknown-none]
 linker= "ld"
+=======
+runner = "scripts/qemu_runner.py"
+>>>>>>> hex-sun-upstream

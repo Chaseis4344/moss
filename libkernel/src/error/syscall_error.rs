@@ -1,3 +1,8 @@
+//! Maps [`KernelError`] variants to POSIX `errno` values
+//! for returning results to user-space system calls.
+
+#![allow(missing_docs)]
+
 use crate::error::FsError;
 
 use super::KernelError;
@@ -38,6 +43,7 @@ pub const EDOM: isize = -33;
 pub const ERANGE: isize = -34;
 pub const EWOULDBLOCK: isize = -EAGAIN;
 pub const ENOSYS: isize = -38;
+pub const EAFNOSUPPORT: isize = -97;
 pub const EOPNOTSUPP: isize = -95;
 pub const ETIMEDOUT: isize = -110;
 
@@ -62,6 +68,8 @@ pub fn kern_err_to_syscall(err: KernelError) -> isize {
         KernelError::NoChildProcess => ECHILD,
         KernelError::OpNotSupported => EOPNOTSUPP,
         KernelError::Interrupted => EINTR,
+        KernelError::NoProcess => ESRCH,
+        KernelError::AddressFamilyNotSupported => EAFNOSUPPORT,
         e => todo!("{e}"),
     }
 }

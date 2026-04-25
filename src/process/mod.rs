@@ -1,5 +1,6 @@
 use crate::drivers::timer::Instant;
 use crate::sched::CPU_STAT;
+use crate::sched::sched_task::Work;
 use crate::{
     arch::ArchImpl,
     kernel::cpu_id::CpuId,
@@ -14,12 +15,12 @@ use alloc::{
     collections::btree_map::BTreeMap,
     sync::{Arc, Weak},
 };
-use core::fmt::Display;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use core::time::Duration;
 use creds::Credentials;
 use fd_table::FileDescriptorTable;
+use libkernel::memory::proc_vm::address_space::{UserAddressSpace, VirtualMemory};
 use libkernel::{
-    UserAddressSpace, VirtualMemory,
     error::{KernelError, Result},
     fs::{Inode, pathbuf::PathBuf},
     memory::{
@@ -27,23 +28,31 @@ use libkernel::{
         allocators::phys::PageAllocation,
         proc_vm::{ProcessVM, vmarea::AccessKind},
     },
+    sync::waker_set::WakerSet,
 };
 use ptrace::PTrace;
+use thread_group::pid::PidT;
+use thread_group::signal::{AtomicSigSet, SigId};
 use thread_group::{Tgid, ThreadGroup};
 
 pub mod caps;
 pub mod clone;
 pub mod creds;
 pub mod ctx;
+pub mod epoll;
 pub mod exec;
 pub mod exit;
 pub mod fd_table;
 pub mod owned;
+pub mod pidfd;
 pub mod prctl;
 pub mod ptrace;
 pub mod sleep;
 pub mod thread_group;
 pub mod threading;
+
+// the idle process (0) and the init process (1) are allocated manually.
+static NEXT_TID: AtomicU32 = AtomicU32::new(2);
 
 // Thread Id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -60,6 +69,14 @@ impl Tid {
 
     fn idle_for_cpu() -> Tid {
         Self(CpuId::this().value() as _)
+    }
+
+    pub fn next_tid() -> Self {
+        Self(NEXT_TID.fetch_add(1, Ordering::Relaxed))
+    }
+
+    pub fn from_pid_t(pid: PidT) -> Self {
+        Self(pid as _)
     }
 }
 
@@ -124,35 +141,6 @@ impl TaskDescriptor {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TaskState {
-    Running,
-    Runnable,
-    Woken,
-    Stopped,
-    Sleeping,
-    Finished,
-}
-
-impl Display for TaskState {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let state_str = match self {
-            TaskState::Running => "R",
-            TaskState::Runnable => "R",
-            TaskState::Woken => "W",
-            TaskState::Stopped => "T",
-            TaskState::Sleeping => "S",
-            TaskState::Finished => "Z",
-        };
-        write!(f, "{state_str}")
-    }
-}
-
-impl TaskState {
-    pub fn is_finished(self) -> bool {
-        matches!(self, Self::Finished)
-    }
-}
 pub type ProcVM = ProcessVM<<ArchImpl as VirtualMemory>::ProcessAddressSpace>;
 
 #[derive(Copy, Clone)]
@@ -175,6 +163,22 @@ impl Comm {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct ITimer {
+    /// If interval is `None`, this timer is a one-shot timer.
+    pub interval: Option<Duration>,
+    /// Instant (wrt the needed clock) at which this timer will next expire.
+    pub next: Instant,
+}
+
+#[derive(Copy, Clone, Default)]
+pub struct ITimers {
+    pub real: Option<ITimer>,
+    // virtual is a reserved keyword
+    pub virtual_: Option<ITimer>,
+    pub prof: Option<ITimer>,
+}
+
 pub struct Task {
     pub tid: Tid,
     pub comm: Arc<SpinLock<Comm>>,
@@ -183,10 +187,12 @@ pub struct Task {
     pub cwd: Arc<SpinLock<(Arc<dyn Inode>, PathBuf)>>,
     pub root: Arc<SpinLock<(Arc<dyn Inode>, PathBuf)>>,
     pub creds: SpinLock<Credentials>,
+    pub i_timers: SpinLock<ITimers>,
     pub fd_table: Arc<SpinLock<FileDescriptorTable>>,
-    pub state: Arc<SpinLock<TaskState>>,
-    pub last_cpu: SpinLock<CpuId>,
     pub ptrace: SpinLock<PTrace>,
+    pub sig_mask: AtomicSigSet,
+    pub pending_signals: AtomicSigSet,
+    pub signal_notifier: SpinLock<WakerSet>,
     pub utime: AtomicUsize,
     pub stime: AtomicUsize,
     pub last_account: AtomicUsize,
@@ -203,6 +209,40 @@ impl Task {
 
     pub fn tid(&self) -> Tid {
         self.tid
+    }
+
+    /// Raise a signal on this specific task (thread-directed).
+    pub fn raise_task_signal(&self, signal: SigId) {
+        self.pending_signals.insert(signal.into());
+        self.notify_signal_waiters();
+    }
+
+    pub fn notify_signal_waiters(&self) {
+        self.signal_notifier.lock_save_irq().wake_all();
+    }
+
+    /// Check for a pending signal on this task or its process, respecting the
+    /// signal mask.
+    pub fn peek_signal(&self) -> Option<SigId> {
+        let mask = self.sig_mask.load();
+        self.pending_signals.peek_signal(mask).or_else(|| {
+            self.process
+                .pending_signals
+                .lock_save_irq()
+                .peek_signal(mask)
+        })
+    }
+
+    /// Take a pending signal from this task or its process, respecting the
+    /// signal mask.
+    pub fn take_signal(&self) -> Option<SigId> {
+        let mask = self.sig_mask.load();
+        self.pending_signals.take_signal(mask).or_else(|| {
+            self.process
+                .pending_signals
+                .lock_save_irq()
+                .take_signal(mask)
+        })
     }
 
     /// Return a new descriptor that uniquely represents this task in the
@@ -308,15 +348,15 @@ impl Task {
     }
 }
 
-pub fn find_task_by_descriptor(descriptor: &TaskDescriptor) -> Option<Arc<Task>> {
+/// Finds a task by it's `Tid`.
+pub fn find_task_by_tid(tid: Tid) -> Option<Arc<Work>> {
     TASK_LIST
         .lock_save_irq()
-        .get(descriptor)
+        .get(&tid)
         .and_then(|x| x.upgrade())
 }
 
-pub static TASK_LIST: SpinLock<BTreeMap<TaskDescriptor, Weak<Task>>> =
-    SpinLock::new(BTreeMap::new());
+pub static TASK_LIST: SpinLock<BTreeMap<Tid, Weak<Work>>> = SpinLock::new(BTreeMap::new());
 
 unsafe impl Send for Task {}
 unsafe impl Sync for Task {}

@@ -1,78 +1,16 @@
-use super::pg_descriptors::{PaMapper, TableMapper};
-use super::pg_tables::L0Table;
-use super::{
-    pg_tables::{
-        DESCRIPTORS_PER_PAGE, L3Table, PageTableMapper, PgTable, PgTableArray, TableMapperTable,
-    },
-    pg_walk::WalkContext,
-};
+//! Utilities for tearing down and freeing page table hierarchies.
+
+use super::pg_tables::{L0Table, L1Table, L3Table};
 use crate::error::Result;
-use crate::memory::address::{PA, TPA};
-
-trait RecursiveTeardownWalker: PgTable + Sized {
-    fn tear_down<F, PM>(
-        table_pa: TPA<PgTableArray<Self>>,
-        ctx: &mut WalkContext<PM>,
-        deallocator: &mut F,
-    ) -> Result<()>
-    where
-        PM: PageTableMapper,
-        F: FnMut(PA);
-}
-
-// Implementation for L0, L1, L2 (Intermediate Tables)
-impl<T> RecursiveTeardownWalker for T
-where
-    T: TableMapperTable,
-    T::NextLevel: RecursiveTeardownWalker,
-{
-    fn tear_down<F, PM>(
-        table_pa: TPA<PgTableArray<Self>>,
-        ctx: &mut WalkContext<PM>,
-        deallocator: &mut F,
-    ) -> Result<()>
-    where
-        PM: PageTableMapper,
-        F: FnMut(PA),
-    {
-        let mut cursor = 0;
-
-        loop {
-            let next_item = unsafe {
-                ctx.mapper.with_page_table(table_pa, |pgtable| {
-                    let table = Self::from_ptr(pgtable);
-
-                    for i in cursor..DESCRIPTORS_PER_PAGE {
-                        let desc = table.get_idx(i);
-
-                        if let Some(addr) = desc.next_table_address() {
-                            return Some((i, addr));
-                        }
-                    }
-                    None
-                })?
-            };
-
-            match next_item {
-                Some((found_idx, phys_addr)) => {
-                    // Recurse first
-                    T::NextLevel::tear_down(phys_addr.cast(), ctx, deallocator)?;
-                    // Free the child table frame
-                    deallocator(phys_addr.cast());
-
-                    // Advance cursor to skip this entry next time
-                    cursor = found_idx + 1;
-                }
-                None => {
-                    // No more valid entries in this table.
-                    break;
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
+use crate::memory::region::PhysMemoryRegion;
+use crate::memory::{
+    PAGE_SIZE,
+    address::TPA,
+    paging::{
+        PaMapper, PageTableMapper, PgTable, PgTableArray, TableMapper,
+        tear_down::RecursiveTeardownWalker, walk::WalkContext,
+    },
+};
 
 // Implementation for L3 (Leaf Table)
 impl RecursiveTeardownWalker for L3Table {
@@ -83,17 +21,17 @@ impl RecursiveTeardownWalker for L3Table {
     ) -> Result<()>
     where
         PM: PageTableMapper,
-        F: FnMut(PA),
+        F: FnMut(PhysMemoryRegion),
     {
         unsafe {
             ctx.mapper.with_page_table(table_pa, |pgtable| {
                 let table = L3Table::from_ptr(pgtable);
 
-                for idx in 0..DESCRIPTORS_PER_PAGE {
+                for idx in 0..Self::DESCRIPTORS_PER_PAGE {
                     let desc = table.get_idx(idx);
 
                     if let Some(addr) = desc.mapped_address() {
-                        deallocator(addr);
+                        deallocator(PhysMemoryRegion::new(addr, PAGE_SIZE));
                     }
                 }
             })?;
@@ -109,11 +47,13 @@ impl RecursiveTeardownWalker for L3Table {
 /// # Parameters
 /// - `l0_table`: The physical address of the root (L0) page table.
 /// - `ctx`: The context for the operation (mapper).
-/// - `deallocator`: A closure called for every physical address that needs freeing.
-///   This includes:
+/// - `deallocator`: A closure called for every physical address that needs freeing,
+///   along with the size of the allocation in bytes:
 ///     1. The User Data frames (Payload).
 ///     2. The L1, L2, and L3 Page Table frames.
 ///     3. The L0 Root Table frame.
+///     
+/// Note; Block mappings (2MiB / 1GiB) are freed with their actual size.
 pub fn tear_down_address_space<F, PM>(
     l0_table: TPA<PgTableArray<L0Table>>,
     ctx: &mut WalkContext<PM>,
@@ -121,47 +61,86 @@ pub fn tear_down_address_space<F, PM>(
 ) -> Result<()>
 where
     PM: PageTableMapper,
-    F: FnMut(PA),
+    F: FnMut(PhysMemoryRegion),
 {
-    L0Table::tear_down(l0_table, ctx, &mut deallocator)?;
-    deallocator(l0_table.to_untyped());
+    // L0Descriptor cannot encode block mappings, so iterate entries explicitly
+    // rather than relying on the blanket RecursiveTeardownWalker impl.
+    let mut cursor = 0;
+
+    loop {
+        let next_item = unsafe {
+            ctx.mapper.with_page_table(l0_table, |pgtable| {
+                let table = L0Table::from_ptr(pgtable);
+                for i in cursor..L0Table::DESCRIPTORS_PER_PAGE {
+                    if let Some(addr) = table.get_idx(i).next_table_address() {
+                        return Some((i, addr));
+                    }
+                }
+                None
+            })?
+        };
+
+        match next_item {
+            Some((idx, l1_addr)) => {
+                L1Table::tear_down(l1_addr, ctx, &mut deallocator)?;
+                deallocator(PhysMemoryRegion::new(l1_addr.to_untyped(), PAGE_SIZE));
+                cursor = idx + 1;
+            }
+            None => break,
+        }
+    }
+
+    deallocator(PhysMemoryRegion::new(l0_table.to_untyped(), PAGE_SIZE));
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::arch::arm64::memory::pg_tables::tests::TestHarness;
-    use crate::memory::address::VA;
-    use crate::memory::permissions::PtePermissions;
-    use std::collections::HashSet;
+    use crate::arch::arm64::memory::{
+        pg_descriptors::MemoryType,
+        pg_tables::{MapAttributes, map_range, tests::TestHarness},
+    };
+    use crate::memory::{
+        PAGE_SIZE,
+        address::{PA, VA},
+        paging::permissions::PtePermissions,
+        region::{PhysMemoryRegion, VirtMemoryRegion},
+    };
+    use std::collections::HashMap;
 
     fn capture_freed_pages<PM: PageTableMapper>(
         l0_table: TPA<PgTableArray<L0Table>>,
         ctx: &mut WalkContext<PM>,
-    ) -> HashSet<usize> {
-        let mut freed_set = HashSet::new();
-        tear_down_address_space(l0_table, ctx, |pa| {
-            if !freed_set.insert(pa.value()) {
+    ) -> HashMap<usize, usize> {
+        let mut freed_map = HashMap::new();
+        tear_down_address_space(l0_table, ctx, |region| {
+            if freed_map
+                .insert(region.start_address().value(), region.size())
+                .is_some()
+            {
                 panic!(
                     "Double free detected! Physical Address {:?} was freed twice.",
-                    pa
+                    region
                 );
             }
         })
         .expect("Teardown failed");
-        freed_set
+        freed_map
     }
 
     #[test]
     fn teardown_empty_table() {
         let mut harness = TestHarness::new(5);
 
-        let freed = capture_freed_pages(harness.l0_table, &mut harness.create_walk_ctx());
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
 
         // Only the Root L0 table itself is freed.
         assert_eq!(freed.len(), 1);
-        assert!(freed.contains(&harness.l0_table.value()));
+        assert!(freed.contains_key(&harness.inner.root_table.value()));
     }
 
     #[test]
@@ -175,7 +154,10 @@ mod tests {
             .map_4k_pages(pa, va.value(), 1, PtePermissions::ro(false))
             .unwrap();
 
-        let freed = capture_freed_pages(harness.l0_table, &mut harness.create_walk_ctx());
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
 
         // 1 Payload Page (0x80000)
         // 1 L3 Table
@@ -183,8 +165,8 @@ mod tests {
         // 1 L1 Table
         // 1 L0 Table (Root)
         assert_eq!(freed.len(), 5);
-        assert!(freed.contains(&pa)); // The payload
-        assert!(freed.contains(&harness.l0_table.value())); // The root
+        assert!(freed.contains_key(&pa)); // The payload
+        assert!(freed.contains_key(&harness.inner.root_table.value())); // The root
     }
 
     #[test]
@@ -207,7 +189,10 @@ mod tests {
             .map_4k_pages(pa2, va2.value(), 1, PtePermissions::rw(false))
             .unwrap();
 
-        let freed = capture_freed_pages(harness.l0_table, &mut harness.create_walk_ctx());
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
 
         // 2 Payload Pages
         // 1 L3 Table (shared)
@@ -215,8 +200,8 @@ mod tests {
         // 1 L1 Table
         // 1 L0 Table
         assert_eq!(freed.len(), 6);
-        assert!(freed.contains(&pa1));
-        assert!(freed.contains(&pa2));
+        assert!(freed.contains_key(&pa1));
+        assert!(freed.contains_key(&pa2));
     }
 
     #[test]
@@ -233,7 +218,10 @@ mod tests {
             .map_4k_pages(0xB0000, va2.value(), 1, PtePermissions::rw(false))
             .unwrap();
 
-        let freed = capture_freed_pages(harness.l0_table, &mut harness.create_walk_ctx());
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
 
         // 2 Payload Pages
         // 2 L3 Tables (one for each branch)
@@ -254,7 +242,10 @@ mod tests {
             .map_4k_pages(start_pa, start_va.value(), 512, PtePermissions::ro(false))
             .unwrap();
 
-        let freed = capture_freed_pages(harness.l0_table, &mut harness.create_walk_ctx());
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
 
         // 512 Payload Pages
         // 1 L3 Table
@@ -262,5 +253,71 @@ mod tests {
         // 1 L1 Table
         // 1 L0 Table
         assert_eq!(freed.len(), 512 + 4);
+    }
+
+    #[test]
+    fn teardown_2mb_block_mapping() {
+        const BLOCK_SIZE: usize = 1 << 21; // 2MiB
+
+        // Root + L1 + L2 = 3 allocations; no L3 needed for an L2 block.
+        let mut harness = TestHarness::new(3);
+
+        // Both PA and VA are 2MiB-aligned, so map_range will create an L2 block.
+        let block_pa = 0x0020_0000usize; // 2MiB
+        let block_va = 0x0020_0000usize; // 2MiB
+        harness
+            .map_4k_pages(block_pa, block_va, 512, PtePermissions::rw(false))
+            .unwrap();
+
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
+
+        // Block frame freed with its actual 2MiB size.
+        assert_eq!(freed.get(&block_pa), Some(&BLOCK_SIZE));
+        // Intermediate table frames freed with PAGE_SIZE.
+        assert_eq!(
+            freed.get(&harness.inner.root_table.value()),
+            Some(&PAGE_SIZE)
+        );
+        // Total: block + L2 + L1 + L0 = 4 entries.
+        assert_eq!(freed.len(), 4);
+    }
+
+    #[test]
+    fn teardown_1gb_block_mapping() {
+        const BLOCK_SIZE: usize = 1 << 30; // 1GiB
+
+        // Root + L1 = 2 allocations; 1GiB block sits in an L1 descriptor.
+        let mut harness = TestHarness::new(2);
+
+        let block_pa = 0x4000_0000usize; // 1GiB-aligned
+        let block_va = 0x4000_0000usize; // 1GiB-aligned
+        map_range(
+            harness.inner.root_table,
+            MapAttributes {
+                phys: PhysMemoryRegion::new(PA::from_value(block_pa), BLOCK_SIZE),
+                virt: VirtMemoryRegion::new(VA::from_value(block_va), BLOCK_SIZE),
+                mem_type: MemoryType::Normal,
+                perms: PtePermissions::rw(false),
+            },
+            &mut harness.create_map_ctx(),
+        )
+        .unwrap();
+
+        let freed = capture_freed_pages(
+            harness.inner.root_table,
+            &mut harness.inner.create_walk_ctx(),
+        );
+
+        // Block frame freed with its actual 1GiB size.
+        assert_eq!(freed.get(&block_pa), Some(&BLOCK_SIZE));
+        assert_eq!(
+            freed.get(&harness.inner.root_table.value()),
+            Some(&PAGE_SIZE)
+        );
+        // Total: block + L1 + L0 = 3 entries.
+        assert_eq!(freed.len(), 3);
     }
 }

@@ -1,5 +1,5 @@
-use crate::memory::uaccess::cstr::UserCStr;
-use crate::sched::current::current_task_shared;
+use crate::memory::uaccess::copy_from_user_slice;
+use crate::sched::syscall_ctx::ProcessCtx;
 use crate::sync::OnceLock;
 use crate::sync::SpinLock;
 use alloc::string::{String, ToString};
@@ -17,10 +17,13 @@ pub fn hostname() -> &'static SpinLock<String> {
 
 const HOST_NAME_MAX: usize = 64;
 
-pub async fn sys_sethostname(name_ptr: TUA<c_char>, name_len: usize) -> Result<usize> {
+pub async fn sys_sethostname(
+    ctx: &ProcessCtx,
+    name_ptr: TUA<c_char>,
+    name_len: usize,
+) -> Result<usize> {
     {
-        let task = current_task_shared();
-        let creds = task.creds.lock_save_irq();
+        let creds = ctx.shared().creds.lock_save_irq();
         creds
             .caps()
             .check_capable(CapabilitiesFlags::CAP_SYS_ADMIN)?;
@@ -30,9 +33,10 @@ pub async fn sys_sethostname(name_ptr: TUA<c_char>, name_len: usize) -> Result<u
         return Err(KernelError::NameTooLong);
     }
     let mut buf = vec![0u8; name_len];
-    let name = UserCStr::from_ptr(name_ptr)
-        .copy_from_user(&mut buf)
-        .await?;
+    copy_from_user_slice(name_ptr.to_untyped(), &mut buf).await?;
+    let name = core::str::from_utf8(&buf)
+        .map_err(|_| KernelError::InvalidValue)?
+        .trim_end_matches('\0');
     *hostname().lock_save_irq() = name.to_string();
     Ok(0)
 }

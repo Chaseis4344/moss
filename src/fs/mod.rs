@@ -1,3 +1,4 @@
+use crate::clock::realtime::date;
 use crate::{
     drivers::{DM, Driver},
     process::Task,
@@ -5,6 +6,7 @@ use crate::{
 };
 use alloc::{borrow::ToOwned, boxed::Box, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 use async_trait::async_trait;
+use core::any::Any;
 use core::sync::atomic::{AtomicU64, Ordering};
 use dir::DirFile;
 use libkernel::{
@@ -33,6 +35,10 @@ pub struct DummyInode {}
 impl Inode for DummyInode {
     fn id(&self) -> InodeId {
         InodeId::dummy()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -77,6 +83,13 @@ impl VfsState {
     fn add_mount(&mut self, mount_point_id: InodeId, mount: Mount) {
         self.filesystems.insert(mount.fs.id(), mount.fs.clone());
         self.mounts.insert(mount_point_id, mount);
+    }
+
+    /// Removes a mount point by its inode ID.
+    fn remove_mount(&mut self, mount_point_id: &InodeId) -> Option<()> {
+        let mount = self.mounts.remove(mount_point_id)?;
+        self.filesystems.remove(&mount.fs.id())?;
+        Some(())
     }
 
     /// Checks if an inode is a mount point and returns the root inode of the
@@ -173,6 +186,19 @@ impl VFS {
         self.state
             .lock_save_irq()
             .add_mount(mount_point_id, new_mount);
+
+        Ok(())
+    }
+
+    #[expect(unused)]
+    pub async fn unmount(&self, mount_point: Arc<dyn Inode>) -> Result<()> {
+        let mount_point_id = mount_point.id();
+
+        // Lock the state and remove the mount.
+        self.state
+            .lock_save_irq()
+            .remove_mount(&mount_point_id)
+            .ok_or(FsError::NotFound)?;
 
         Ok(())
     }
@@ -351,7 +377,9 @@ impl VFS {
                         return Err(FsError::NotADirectory.into());
                     }
 
-                    parent_inode.create(file_name, FileType::File, mode).await?
+                    parent_inode
+                        .create(file_name, FileType::File, mode, Some(date()))
+                        .await?
                 } else {
                     // O_CREAT was not specified, so NotFound is the correct error.
                     return Err(FsError::NotFound.into());
@@ -455,7 +483,7 @@ impl VFS {
 
                 // Delegate the creation to the filesystem-specific inode.
                 parent_inode
-                    .create(dir_name, FileType::Directory, mode)
+                    .create(dir_name, FileType::Directory, mode, Some(date()))
                     .await?;
 
                 Ok(())
@@ -507,7 +535,7 @@ impl VFS {
         {
             let creds = task.creds.lock_save_irq();
 
-            if attr.mode.contains(FilePermissions::S_ISVTX)
+            if attr.permissions.contains(FilePermissions::S_ISVTX)
                 && attr.uid != creds.euid()
                 && parent_attr.uid != creds.euid()
             {

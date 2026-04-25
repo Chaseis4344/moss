@@ -1,3 +1,5 @@
+//! File attribute types (permissions, modes, and metadata).
+
 use crate::{
     error::{KernelError, Result},
     proc::{
@@ -7,10 +9,10 @@ use crate::{
 };
 
 use super::{FileType, InodeId};
-use bitflags::bitflags;
 use core::time::Duration;
 
 bitflags::bitflags! {
+    /// POSIX access-mode flags for permission checks (`R_OK`, `W_OK`, `X_OK`).
     #[derive(Debug, Clone, Copy)]
     pub struct AccessMode: i32 {
         /// Execution is permitted
@@ -22,38 +24,96 @@ bitflags::bitflags! {
     }
 }
 
-bitflags! {
-    #[derive(Clone, Copy, Debug)]
-    pub struct FilePermissions: u16 {
-        const S_IXOTH = 0x0001;
-        const S_IWOTH = 0x0002;
-        const S_IROTH = 0x0004;
+mod _file_permissions {
+    #![allow(missing_docs)]
+    use bitflags::bitflags;
+    bitflags! {
+        /// POSIX file permission bits (owner/group/other read/write/execute and setuid/setgid/sticky).
+        #[derive(Clone, Copy, Debug)]
+        pub struct FilePermissions: u16 {
+            const S_IXOTH = 0x0001;
+            const S_IWOTH = 0x0002;
+            const S_IROTH = 0x0004;
 
-        const S_IXGRP = 0x0008;
-        const S_IWGRP = 0x0010;
-        const S_IRGRP = 0x0020;
+            const S_IXGRP = 0x0008;
+            const S_IWGRP = 0x0010;
+            const S_IRGRP = 0x0020;
 
-        const S_IXUSR = 0x0040;
-        const S_IWUSR = 0x0080;
-        const S_IRUSR = 0x0100;
+            const S_IXUSR = 0x0040;
+            const S_IWUSR = 0x0080;
+            const S_IRUSR = 0x0100;
 
-        const S_ISVTX = 0x0200;
+            const S_ISVTX = 0x0200;
 
-        const S_ISGID = 0x0400;
-        const S_ISUID = 0x0800;
+            const S_ISGID = 0x0400;
+            const S_ISUID = 0x0800;
+        }
+    }
+}
+pub use _file_permissions::FilePermissions;
 
-        // Mutually-exclusive file types:
-        const S_IFIFO = 0x1000;
-        const S_IFCHR = 0x2000;
-        const S_IFDIR = 0x4000;
-        const S_IFBLK = 0x6000;
-        const S_IFREG = 0x8000;
-        const S_IFLNK = 0xA000;
-        const S_IFSOCK = 0xC000;
+mod _file_mode {
+    #![allow(missing_docs)]
+    use bitflags::bitflags;
+    bitflags! {
+        /// Combined file type and permission bits, as returned by `stat`.
+        #[derive(Clone, Copy, Debug)]
+        pub struct FileMode: u16 {
+            const S_IXOTH = 0x0001;
+            const S_IWOTH = 0x0002;
+            const S_IROTH = 0x0004;
+
+            const S_IXGRP = 0x0008;
+            const S_IWGRP = 0x0010;
+            const S_IRGRP = 0x0020;
+
+            const S_IXUSR = 0x0040;
+            const S_IWUSR = 0x0080;
+            const S_IRUSR = 0x0100;
+
+            const S_ISVTX = 0x0200;
+
+            const S_ISGID = 0x0400;
+            const S_ISUID = 0x0800;
+
+            // Mutually-exclusive file types:
+            const S_IFIFO = 0x1000;
+            const S_IFCHR = 0x2000;
+            const S_IFDIR = 0x4000;
+            const S_IFBLK = 0x6000;
+            const S_IFREG = 0x8000;
+            const S_IFLNK = 0xA000;
+            const S_IFSOCK = 0xC000;
+        }
+    }
+}
+pub use _file_mode::FileMode;
+
+impl From<FileMode> for FilePermissions {
+    fn from(mode: FileMode) -> Self {
+        FilePermissions::from_bits_truncate(mode.bits())
+    }
+}
+
+impl FileMode {
+    /// Constructs a `FileMode` from a file type and permission bits.
+    pub fn new(file_type: FileType, permissions: FilePermissions) -> Self {
+        let mut mode = FileMode::from_bits_truncate(permissions.bits());
+        mode |= match file_type {
+            FileType::Directory => FileMode::S_IFDIR,
+            FileType::File => FileMode::S_IFREG,
+            FileType::Symlink => FileMode::S_IFLNK,
+            FileType::BlockDevice(_) => FileMode::S_IFBLK,
+            FileType::CharDevice(_) => FileMode::S_IFCHR,
+            FileType::Fifo => FileMode::S_IFIFO,
+            FileType::Socket => FileMode::S_IFSOCK,
+        };
+        mode
     }
 }
 
 /// Represents file metadata, similar to `stat`.
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct FileAttr {
     pub id: InodeId,
@@ -65,10 +125,17 @@ pub struct FileAttr {
     pub mtime: Duration, // Modification time
     pub ctime: Duration, // Change time
     pub file_type: FileType,
-    pub mode: FilePermissions,
+    pub permissions: FilePermissions,
     pub nlinks: u32,
     pub uid: Uid,
     pub gid: Gid,
+}
+
+impl FileAttr {
+    /// Returns the combined file type and permission bits as a `FileMode`.
+    pub fn mode(&self) -> FileMode {
+        FileMode::new(self.file_type, self.permissions)
+    }
 }
 
 impl Default for FileAttr {
@@ -83,7 +150,7 @@ impl Default for FileAttr {
             mtime: Duration::new(0, 0),
             ctime: Duration::new(0, 0),
             file_type: FileType::File,
-            mode: FilePermissions::empty(),
+            permissions: FilePermissions::empty(),
             nlinks: 1,
             uid: Uid::new_root(),
             gid: Gid::new_root_group(),
@@ -116,7 +183,7 @@ impl FileAttr {
         if uid.is_root() {
             if requested_mode.contains(AccessMode::X_OK) {
                 // Root still needs at least one execute bit to be set for X_OK
-                if self.mode.intersects(
+                if self.permissions.intersects(
                     FilePermissions::S_IXUSR | FilePermissions::S_IXGRP | FilePermissions::S_IXOTH,
                 ) {
                     return Ok(());
@@ -129,13 +196,13 @@ impl FileAttr {
         // Determine which set of permission bits to use (owner, group, or other)
         let perms_to_check = if self.uid == uid {
             // User is the owner
-            self.mode
+            self.permissions
         } else if self.gid == gid {
             // User is in the file's group. Shift group bits to align with owner bits for easier checking.
-            FilePermissions::from_bits_truncate(self.mode.bits() << 3)
+            FilePermissions::from_bits_truncate(self.permissions.bits() << 3)
         } else {
             // Others. Shift other bits to align with owner bits.
-            FilePermissions::from_bits_truncate(self.mode.bits() << 6)
+            FilePermissions::from_bits_truncate(self.permissions.bits() << 6)
         };
 
         if requested_mode.contains(AccessMode::R_OK)
@@ -175,11 +242,11 @@ mod tests {
     const OTHER_UID: Uid = Uid::new(1002);
     const OTHER_GID: Gid = Gid::new(3000);
 
-    fn setup_file(mode: FilePermissions) -> FileAttr {
+    fn setup_file(permissions: FilePermissions) -> FileAttr {
         FileAttr {
             uid: OWNER_UID,
             gid: FILE_GROUP_GID,
-            mode,
+            permissions,
             ..Default::default()
         }
     }

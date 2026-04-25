@@ -59,6 +59,7 @@ impl Arch for X86_64 {
     fn power_off() -> ! {
         //Pull in things from acpi to accomplish
         todo!("Arch Impl");
+
     }
 
     fn restart() -> !	{
@@ -75,6 +76,10 @@ impl Arch for X86_64 {
     }
     
     fn create_idle_task() -> OwnedTask	{
+        todo!("Arch Impl");
+    }
+
+    fn create_idle_task() -> Task	{
         todo!("Arch Impl");
     }
 

@@ -3,8 +3,9 @@ use crate::drivers::fs::proc::get_inode_id;
 use crate::drivers::fs::proc::meminfo::ProcMeminfoInode;
 use crate::drivers::fs::proc::stat::ProcStatInode;
 use crate::drivers::fs::proc::task::ProcTaskInode;
-use crate::process::{TASK_LIST, TaskDescriptor, Tid};
-use crate::sched::current::current_task;
+use crate::process::thread_group::pid::PidT;
+use crate::process::{TASK_LIST, TaskDescriptor, Tid, find_task_by_tid};
+use crate::sched::current_work;
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -26,7 +27,7 @@ impl ProcRootInode {
             id: InodeId::from_fsid_and_inodeid(PROCFS_ID, 0),
             attr: FileAttr {
                 file_type: FileType::Directory,
-                mode: FilePermissions::from_bits_retain(0o555),
+                permissions: FilePermissions::from_bits_retain(0o555),
                 ..FileAttr::default()
             },
         }
@@ -40,13 +41,14 @@ impl Inode for ProcRootInode {
     }
 
     async fn lookup(&self, name: &str) -> error::Result<Arc<dyn Inode>> {
+        let current = current_work();
+
         // Lookup a PID directory.
         let desc = if name == "self" {
-            let current_task = current_task();
-            TaskDescriptor::from_tgid_tid(current_task.pgid(), Tid::from_tgid(current_task.pgid()))
+            // FIXME: The group leader may have exited.
+            TaskDescriptor::from_tgid_tid(current.pgid(), Tid::from_tgid(current.pgid()))
         } else if name == "thread-self" {
-            let current_task = current_task();
-            current_task.descriptor()
+            current.descriptor()
         } else if name == "stat" {
             return Ok(Arc::new(ProcStatInode::new(
                 InodeId::from_fsid_and_inodeid(self.id.fs_id(), get_inode_id(&["stat"])),
@@ -60,18 +62,15 @@ impl Inode for ProcRootInode {
                 InodeId::from_fsid_and_inodeid(self.id.fs_id(), get_inode_id(&["cmdline"])),
             )));
         } else {
-            let pid: u32 = name.parse().map_err(|_| FsError::NotFound)?;
+            let pid: PidT = name.parse().map_err(|_| FsError::NotFound)?;
             // Search for the task descriptor.
-            TASK_LIST
-                .lock_save_irq()
-                .keys()
-                .find(|d| d.tgid().value() == pid)
-                .cloned()
+            find_task_by_tid(Tid::from_pid_t(pid))
                 .ok_or(FsError::NotFound)?
+                .descriptor()
         };
 
         Ok(Arc::new(ProcTaskInode::new(
-            desc,
+            desc.tid(),
             false,
             InodeId::from_fsid_and_inodeid(self.id.fs_id(), get_inode_id(&[name])),
         )))
@@ -85,14 +84,14 @@ impl Inode for ProcRootInode {
         let mut entries: Vec<Dirent> = Vec::new();
         // Gather task list under interrupt-safe lock.
         let task_list = TASK_LIST.lock_save_irq();
-        for (desc, _) in task_list
+        for (tid, _) in task_list
             .iter()
             .filter(|(_, task)| task.upgrade().is_some())
         {
-            let name = desc.tgid().value().to_string();
+            let name = tid.value().to_string();
             let inode_id = InodeId::from_fsid_and_inodeid(
                 PROCFS_ID,
-                get_inode_id(&[&desc.tgid().value().to_string()]),
+                get_inode_id(&[&tid.value().to_string()]),
             );
             let next_offset = (entries.len() + 1) as u64;
             entries.push(Dirent::new(
@@ -102,12 +101,14 @@ impl Inode for ProcRootInode {
                 next_offset,
             ));
         }
-        let current_task = current_task();
+
+        let current = current_work();
+
         entries.push(Dirent::new(
             "self".to_string(),
             InodeId::from_fsid_and_inodeid(
                 PROCFS_ID,
-                get_inode_id(&[&current_task.descriptor().tgid().value().to_string()]),
+                get_inode_id(&[&current.descriptor().tgid().value().to_string()]),
             ),
             FileType::Directory,
             (entries.len() + 1) as u64,
@@ -116,7 +117,7 @@ impl Inode for ProcRootInode {
             "thread-self".to_string(),
             InodeId::from_fsid_and_inodeid(
                 PROCFS_ID,
-                get_inode_id(&[&current_task.descriptor().tid().value().to_string()]),
+                get_inode_id(&[&current.descriptor().tid().value().to_string()]),
             ),
             FileType::Directory,
             (entries.len() + 1) as u64,
@@ -141,5 +142,9 @@ impl Inode for ProcRootInode {
         ));
 
         Ok(Box::new(SimpleDirStream::new(entries, start_offset)))
+    }
+
+    fn as_any(&self) -> &dyn core::any::Any {
+        self
     }
 }
