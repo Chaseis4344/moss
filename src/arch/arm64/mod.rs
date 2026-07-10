@@ -48,6 +48,8 @@ pub mod ptrace;
 pub struct Aarch64 {}
 
 impl CpuOps for Aarch64 {
+    type InterruptFlags = u64;
+
     fn id() -> usize {
         MPIDR_EL1.read(MPIDR_EL1::Aff0) as _
     }
@@ -58,11 +60,11 @@ impl CpuOps for Aarch64 {
         }
     }
 
-    fn disable_interrupts() -> usize {
+    fn disable_interrupts() -> Self::InterruptFlags {
         local_irq_save()
     }
 
-    fn restore_interrupt_state(state: usize) {
+    fn restore_interrupt_state(state: Self::InterruptFlags) {
         local_irq_restore(state);
     }
 
@@ -76,8 +78,6 @@ impl VirtualMemory for Aarch64 {
     type ProcessAddressSpace = Arm64ProcessAddressSpace;
     type KernelAddressSpace = Arm64KernelAddressSpace;
 
-    const PAGE_OFFSET: usize = PAGE_OFFSET;
-
     fn kern_address_space() -> &'static SpinLock<Self::KernelAddressSpace> {
         KERN_ADDR_SPC.get().unwrap()
     }
@@ -86,6 +86,8 @@ impl VirtualMemory for Aarch64 {
 impl Arch for Aarch64 {
     type UserContext = ExceptionState;
     type PTraceGpRegs = Arm64PtraceGPRegs;
+
+    const PAGE_OFFSET: usize = PAGE_OFFSET;
 
     fn new_user_context(entry_point: VA, stack_top: VA) -> Self::UserContext {
         ExceptionState {

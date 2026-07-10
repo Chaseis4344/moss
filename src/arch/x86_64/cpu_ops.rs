@@ -1,7 +1,7 @@
-use libkernel::CpuOps;
 use core::arch::asm;
 use core::arch::x86_64::__cpuid;
 use core::arch::x86_64::CpuidResult;
+use libkernel::CpuOps;
 
 impl CpuOps for super::X86_64 {
     fn halt() -> ! {
@@ -12,7 +12,7 @@ impl CpuOps for super::X86_64 {
 
     fn id() -> usize {
         //SAFTEY: This implementation is for x86_64, this operation is universally supported in
-        //long mode 
+        //long mode
         //Additionally while 0x1F is a newer, superset leaf, it is less commonly supported (to my
         //knowledge)
         const V2APIC_ID_CHECK: u32 = 0x0B;
@@ -24,10 +24,10 @@ impl CpuOps for super::X86_64 {
         //Should be safe to push something to stack, pop it from stack and store into variable
         unsafe {
             //Should work in theory - valid on all x64 things
-                asm!("pushf", //flags to stack
-                    "pop rax", //stack to reg
-                    out("rax") flags
-                ); //Get mask out
+            asm!("pushf", //flags to stack
+                "pop rax", //stack to reg
+                out("rax") flags
+            ); //Get mask out
         }
         //Unsure on intention of this function, if we want to only extract the Interrupt flag from
         //EFlags, we can, but if we want to extract all flags, that is easier. I'll be assuming we
@@ -35,19 +35,17 @@ impl CpuOps for super::X86_64 {
         //the case
         //let if_bit = (flags & (1<<8));
         x86_64::instructions::interrupts::disable(); //Disable maskable interupts
-        
+
         //Zero-extend if we can
         flags as usize
     }
 
-
     fn enable_interrupts() {
         //Set interrupt flag - does asm!("sti"); under the hood
-        x86_64::instructions::interrupts::enable(); 
+        x86_64::instructions::interrupts::enable();
     }
 
     fn restore_interrupt_state(flags: usize) {
-        
         unsafe {
             //Assumes EAX gets filled before execution of instructions
             asm!(
@@ -56,7 +54,6 @@ impl CpuOps for super::X86_64 {
                 in("eax") (flags as u32)
             )
         }
-        x86_64::instructions::interrupts::enable(); 
-        
+        x86_64::instructions::interrupts::enable();
     }
 }

@@ -8,6 +8,7 @@ use crate::{
     },
     fs::{
         dir::sys_getdents64,
+        memfd::sys_memfd_create,
         pipe::sys_pipe2,
         syscalls::{
             at::{
@@ -83,6 +84,7 @@ use crate::{
             fcntl::sys_fcntl,
             select::{sys_ppoll, sys_pselect6},
         },
+        inotify::{sys_inotify_add_watch, sys_inotify_init1, sys_inotify_rm_watch},
         pidfd::sys_pidfd_open,
         prctl::sys_prctl,
         ptrace::{TracePoint, ptrace_stop, sys_ptrace},
@@ -160,6 +162,11 @@ pub async fn handle_syscall(mut ctx: ProcessCtx) {
             )
             .await
         }
+        0x1a => sys_inotify_init1(&ctx, arg1 as _).await,
+        0x1b => {
+            sys_inotify_add_watch(&ctx, arg1.into(), TUA::from_value(arg2 as _), arg3 as _).await
+        }
+        0x1c => sys_inotify_rm_watch(&ctx, arg1.into(), arg2 as i32).await,
         0x5 => {
             sys_setxattr(
                 &ctx,
@@ -755,6 +762,8 @@ pub async fn handle_syscall(mut ctx: ProcessCtx) {
             .await
         }
         0x116 => sys_getrandom(TUA::from_value(arg1 as _), arg2 as _, arg3 as _).await,
+        0x117 => sys_memfd_create(&ctx, TUA::from_value(arg1 as _), arg2 as _).await,
+        0x118 => Err(KernelError::NotSupported),
         0x11d => {
             sys_copy_file_range(
                 &ctx,

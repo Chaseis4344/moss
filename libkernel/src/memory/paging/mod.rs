@@ -9,7 +9,8 @@ use core::marker::PhantomData;
 use permissions::PtePermissions;
 
 pub mod permissions;
-pub(crate) mod tear_down;
+pub mod smalloc_page_allocator;
+pub mod tear_down;
 pub mod walk;
 
 #[cfg(test)]
@@ -69,6 +70,9 @@ pub trait PaMapper: PageTableEntry {
 
     /// Return the mapped physical address.
     fn mapped_address(self) -> Option<PA>;
+
+    /// Return the permissions set on the PTE.
+    fn permissions(self) -> Option<PtePermissions>;
 }
 
 /// Trait representing a single level of the page table hierarchy.

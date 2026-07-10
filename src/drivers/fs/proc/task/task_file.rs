@@ -1,4 +1,7 @@
-use crate::process::{Tid, find_task_by_tid};
+use crate::{
+    drivers::fs::cgroup::cgroup_path_for_thread_group,
+    process::{Tid, find_task_by_tid},
+};
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -19,6 +22,7 @@ pub enum TaskFileType {
     Stat,
     Maps,
     Exe,
+    Cgroup,
 }
 
 impl TryFrom<&str> for TaskFileType {
@@ -34,6 +38,7 @@ impl TryFrom<&str> for TaskFileType {
             "root" => Ok(TaskFileType::Root),
             "maps" => Ok(TaskFileType::Maps),
             "exe" => Ok(TaskFileType::Exe),
+            "cgroup" => Ok(TaskFileType::Cgroup),
             _ => Err(()),
         }
     }
@@ -57,7 +62,8 @@ impl ProcTaskFileInode {
                     | TaskFileType::Comm
                     | TaskFileType::State
                     | TaskFileType::Maps
-                    | TaskFileType::Stat => FileType::File,
+                    | TaskFileType::Stat
+                    | TaskFileType::Cgroup => FileType::File,
                     TaskFileType::Cwd | TaskFileType::Root | TaskFileType::Exe => FileType::Symlink,
                 },
                 permissions: FilePermissions::from_bits_retain(0o444),
@@ -103,7 +109,8 @@ Threads:\t{tasks}\n",
                 TaskFileType::Comm => format!("{name}\n", name = name.as_str()),
                 TaskFileType::State => format!("{state}\n"),
                 TaskFileType::Stat => {
-                    let vm = task.vm.lock_save_irq();
+                    let proc_vm = task.vm.shared_vm();
+                    let vm = proc_vm.lock_save_irq();
 
                     let mut vsize = 0;
                     let mut startcode = 0;
@@ -211,7 +218,8 @@ Threads:\t{tasks}\n",
                 TaskFileType::Root => task.root.lock_save_irq().1.as_str().to_string(),
                 TaskFileType::Maps => {
                     let mut output = String::new();
-                    let mut vm = task.vm.lock_save_irq();
+                    let proc_vm = task.vm.shared_vm();
+                    let mut vm = proc_vm.lock_save_irq();
 
                     for vma in vm.mm_mut().iter_vmas() {
                         output.push_str(&format!(
@@ -236,6 +244,9 @@ Threads:\t{tasks}\n",
                     } else {
                         "(deleted)".to_string()
                     }
+                }
+                TaskFileType::Cgroup => {
+                    format!("0::{}\n", cgroup_path_for_thread_group(task.process.tgid))
                 }
             }
         } else {

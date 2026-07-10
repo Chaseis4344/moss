@@ -2,7 +2,7 @@ use crate::{
     arch::Arch
 };
 use crate::process::thread_group::signal::ksigaction::UserspaceSigAction;
- use crate::process::thread_group::signal::SigId;
+use crate::process::thread_group::signal::SigId;
 use crate::process::owned::OwnedTask;
 use crate::process::Task;
 use ringbuf::Arc;
@@ -47,9 +47,23 @@ impl From<&UserContext> for x64PTraceGpRegs {
 }
 
 
+
+
+type PTraceGpRegs = x64PTraceGpRegs;
+use alloc::sync::Arc;
+use crate::process::thread_group::signal::SigId;
+use crate::process::thread_group::signal::ksigaction::UserspaceSigAction;
+use crate::process::Task;
+
+
+mod cpu_ops;
+mod virtual_memory;
+
+#[derive(Clone)]
+pub struct UserContext{}
+pub struct X86_64 {}
 impl Arch for X86_64 {
 
-    type PTraceGpRegs = x64PTraceGpRegs;
     type UserContext = UserContext;
     
     fn name() -> &'static str {
@@ -83,6 +97,10 @@ impl Arch for X86_64 {
         todo!("Arch Impl");
     }
 
+    fn create_idle_task() -> Task	{
+        todo!("Arch Impl");
+    }
+
     fn do_signal(
         sig: SigId,
         action: UserspaceSigAction,
@@ -92,7 +110,11 @@ impl Arch for X86_64 {
 
 
     fn do_signal_return() -> impl Future<Output = Result<<Self as Arch>::UserContext>>	{
-        async {todo!("Arch Impl");}
+        async {todo!("Arch Impl")};
+    }
+
+    fn do_signal_return() -> impl Future<Output = Result<<Self as Arch>::UserContext>>	{
+        todo!("Arch Impl");
     }
 
     unsafe fn copy_from_user(src: UA, dst: *mut (), len: usize)
@@ -130,5 +152,13 @@ impl Arch for X86_64 {
  
     fn get_cmdline() -> Option<alloc::string::String> {
         todo!("implement get_cmdline")
+    }
+    fn cpu_count() -> usize {
+        // This should return logical cores, if true cores are wanted we will need more complex
+        // logic
+        // SAFETY: This operation is standard arcoss most manufacturers, Intel being a notable
+        // exception, this code can be revised later to comply with their system for logical
+        // procesors
+        unsafe {((__cpuid(1).ebx >> 16) & 0xff) as usize} 
     }
 }
