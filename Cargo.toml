@@ -55,7 +55,7 @@ arm_pl031 = { version = "0.2.1", default-features = false }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 acpi = "6.0.1"
-x86_64 = { version = "0.15.4", features = ["nightly", "instructions"]}
+x86_64 = { version = "0.15", features = ["nightly", "instructions"]}
 
 [features]
 default = ["smp"]

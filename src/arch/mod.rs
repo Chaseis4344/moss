@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! The architectural abstraction layer.
 //!
 //! This module defines the `Arch` trait, which encapsulates all

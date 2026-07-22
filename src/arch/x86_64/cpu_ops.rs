@@ -1,9 +1,9 @@
 use core::arch::asm;
 use core::arch::x86_64::__cpuid;
-use core::arch::x86_64::CpuidResult;
 use libkernel::CpuOps;
 
 impl CpuOps for super::X86_64 {
+    type InterruptFlags = u64;
     fn halt() -> ! {
         loop {
             x86_64::instructions::hlt()
@@ -16,11 +16,11 @@ impl CpuOps for super::X86_64 {
         //Additionally while 0x1F is a newer, superset leaf, it is less commonly supported (to my
         //knowledge)
         const V2APIC_ID_CHECK: u32 = 0x0B;
-        unsafe { __cpuid(V2APIC_ID_CHECK).edx as usize }
+        __cpuid(V2APIC_ID_CHECK).edx as usize
     }
 
-    fn disable_interrupts() -> usize {
-        let mut flags: u32;
+    fn disable_interrupts() -> Self::InterruptFlags {
+        let mut flags: Self::InterruptFlags;
         //Should be safe to push something to stack, pop it from stack and store into variable
         unsafe {
             //Should work in theory - valid on all x64 things
@@ -37,7 +37,7 @@ impl CpuOps for super::X86_64 {
         x86_64::instructions::interrupts::disable(); //Disable maskable interupts
 
         //Zero-extend if we can
-        flags as usize
+        flags
     }
 
     fn enable_interrupts() {
@@ -45,7 +45,7 @@ impl CpuOps for super::X86_64 {
         x86_64::instructions::interrupts::enable();
     }
 
-    fn restore_interrupt_state(flags: usize) {
+    fn restore_interrupt_state(flags: Self::InterruptFlags) {
         unsafe {
             //Assumes EAX gets filled before execution of instructions
             asm!(

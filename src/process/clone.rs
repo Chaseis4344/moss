@@ -80,7 +80,7 @@ pub async fn sys_clone(
         let current_task = ctx.task();
 
         let mut user_ctx = *current_task.ctx.user();
-        
+
         //
         // TODO: Make this arch indepdenant. The child returns '0' on clone.
         // TRIAGE: I have used #[cfg()] here explicitly to turn off this feature, future
@@ -111,11 +111,11 @@ pub async fn sys_clone(
                 // set.
                 return Err(KernelError::InvalidValue);
             }
-            
+
             // TRIAGE: I have used #[cfg()] here explicitly to turn off this feature, future
             // implementations will be required to implement whatever is done here properly, and avoid
             // arm-dependent code
-            //This redirects the arm64 main stack pointer (el0) to a new stack pointer in 
+            //This redirects the arm64 main stack pointer (el0) to a new stack pointer in
             //
             //NOTE: This will likely require a new abstraction to a type of "stack pointer" type or
             //other way to record registers
@@ -123,12 +123,13 @@ pub async fn sys_clone(
             {
                 user_ctx.sp_el0 = newsp.value() as _;
             }
+
+            #[cfg(target_arch = "aarch64")]
             (
                 // A new task within this thread group.
                 current_task.process.clone(),
                 current_task.process.next_tid(),
-            )
-            user_ctx.sp_el0 = newsp.value() as _;
+            );
 
             // A new task within this thread group.
             current_task.process.clone()

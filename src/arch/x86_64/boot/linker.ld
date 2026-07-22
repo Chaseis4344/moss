@@ -5,9 +5,12 @@ SECTIONS {
     . = 2M;
     . = ALIGN(8);
 
+    .boot : {
+        *(.multiboot_header)
+    }
+
     .text :
     {
-        *(.multiboot_header)
         *(.text .text.*)
     }
     .data : {

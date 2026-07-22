@@ -2,7 +2,7 @@
 //!
 //! RTCs often differ in how they represent time, so the idea is to return a [`Duration`] since the Unix epoch,
 //! with each driver responsible for converting/handling hardware bugs.
-
+#[cfg(target_arch = "aarch64")]
 pub mod pl031;
 
 use crate::sync::OnceLock;
